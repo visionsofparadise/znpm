@@ -2,10 +2,12 @@ import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNewStoreController } from "@pnpm/store-connection-manager";
 import { getStorePath } from "@pnpm/store-path";
+import { finishWorkers } from "@pnpm/worker";
 import { detachPackageDirectory } from "./detach";
 import { readHiddenLockfile, wantedPackagesOf, type Resolution, type WantedPackage } from "./hiddenLockfile";
 import { cacacheTarballPathOf } from "./npmCache";
 import { sealPackageDirectory } from "./seal";
+import { storeControllerOptionsOf } from "./storeController";
 
 export interface ConvertSummary {
 	entries: number;
@@ -146,26 +148,6 @@ export async function convert(
 		failed,
 		cacheMisses,
 		storeDirectory,
-	};
-}
-
-export function storeControllerOptionsOf(storeDirectory: string): {
-	storeDir: string;
-	cacheDir: string;
-	rawConfig: Record<string, string>;
-	registries: { default: string };
-	packageImportMethod: "hardlink";
-	verifyStoreIntegrity: true;
-	virtualStoreDirMaxLength: number;
-} {
-	return {
-		storeDir: storeDirectory,
-		cacheDir: join(storeDirectory, "..", "cache"),
-		rawConfig: {},
-		registries: { default: "https://registry.npmjs.org/" },
-		packageImportMethod: "hardlink",
-		verifyStoreIntegrity: true,
-		virtualStoreDirMaxLength: 120,
 	};
 }
 
@@ -383,14 +365,6 @@ async function importBatch(
 	await Promise.all(Array.from({ length: workerCount }, worker));
 
 	return { imported, failed, cacheMisses };
-}
-
-export async function finishWorkers(): Promise<void> {
-	const finish = (globalThis as typeof globalThis & { finishWorkers?: () => Promise<void> }).finishWorkers;
-
-	if (finish !== undefined) {
-		await finish();
-	}
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,5 +1,6 @@
 import { createNewStoreController } from "@pnpm/store-connection-manager";
-import { finishWorkers, storeControllerOptionsOf } from "./convert";
+import { finishWorkers } from "@pnpm/worker";
+import { storeControllerOptionsOf } from "./storeController";
 
 export async function pruneStoreDirectories(storeDirectories: Array<string>): Promise<void> {
 	for (const storeDirectory of storeDirectories) {

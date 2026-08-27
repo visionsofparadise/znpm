@@ -9,7 +9,6 @@
 		"markdownlint-cli2",
 		"textlint",
 		"textlint-filter-rule-comments",
-		"textlint-rule-no-dead-link",
-		"@pnpm/worker"
+		"textlint-rule-no-dead-link"
 	]
 }
