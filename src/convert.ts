@@ -203,7 +203,11 @@ function isSelfBuilding(packageDirectory: string): boolean {
 		const manifest: unknown = JSON.parse(readFileSync(join(packageDirectory, "package.json"), "utf8"));
 		const scripts = isRecord(manifest) && isRecord(manifest.scripts) ? manifest.scripts : {};
 
-		return Boolean(scripts.install ?? scripts.preinstall ?? scripts.postinstall ?? scripts.prepare);
+		return ["install", "preinstall", "postinstall", "prepare"].some((name) => {
+			const script = scripts[name];
+
+			return typeof script === "string" && script !== "";
+		});
 	} catch {
 		return false;
 	}
