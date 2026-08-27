@@ -24,16 +24,18 @@ import {
 	writeState,
 	type PathChange,
 } from "./home";
+import { pruneStoreDirectories } from "./prune";
 import { realNpmPathOf } from "./realNpm";
 import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
+import { volumeStoreDirectoriesOf } from "./volumeStores";
 
 setPnpmWorkerScriptPath();
 runCli(main);
 
-function main(): void {
+function main(): void | Promise<void> {
 	const userArguments = userArgumentsOf(process.argv, import.meta.url);
 	const { values, positionals } = parseArgs({
 		args: userArguments,
@@ -76,6 +78,10 @@ function main(): void {
 			return;
 		}
 
+		case "gc": {
+			return gc();
+		}
+
 		case undefined: {
 			throw new Error("znpm requires a command");
 		}
@@ -84,6 +90,14 @@ function main(): void {
 			throw new Error(`znpm has no command ${command}`);
 		}
 	}
+}
+
+async function gc(): Promise<void> {
+	const override = process.env.ZNPM_STORE_DIR;
+	const storeDirectories =
+		override !== undefined && override !== "" ? [override] : volumeStoreDirectoriesOf(process.env, process.platform);
+
+	await pruneStoreDirectories(storeDirectories);
 }
 
 function placeShim(): void {
