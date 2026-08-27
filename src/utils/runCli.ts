@@ -1,10 +1,6 @@
-export function runCli(main: () => void | Promise<void>): void {
+export async function runCli(main: () => void | Promise<void>): Promise<void> {
 	try {
-		const result = main();
-
-		if (result instanceof Promise) {
-			void result.catch(exitFromError);
-		}
+		await main();
 	} catch (error: unknown) {
 		exitFromError(error);
 	}

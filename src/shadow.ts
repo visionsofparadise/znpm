@@ -10,9 +10,9 @@ import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
 
 setPnpmWorkerScriptPath();
-runCli(main);
+await runCli(main);
 
-function main(): void {
+async function main(): Promise<void> {
 	const npmArguments = userArgumentsOf(process.argv, import.meta.url);
 	const realNpm = resolveRealNpm(process.env, homeDirectoryOf(process.platform));
 
@@ -32,10 +32,7 @@ function main(): void {
 		);
 	}
 
-	void convertChangedTrees(realNpm, npmArguments).catch((error: unknown) => {
-		console.error(error instanceof Error ? error.message : String(error));
-		process.exit(1);
-	});
+	await convertChangedTrees(realNpm, npmArguments);
 }
 
 async function convertChangedTrees(realNpm: RealNpm, npmArguments: Array<string>): Promise<void> {

@@ -33,7 +33,7 @@ import { userArgumentsOf } from "./utils/userArgumentsOf";
 import { volumeStoreDirectoriesOf } from "./volumeStores";
 
 setPnpmWorkerScriptPath();
-runCli(main);
+await runCli(main);
 
 function main(): void | Promise<void> {
 	const userArguments = userArgumentsOf(process.argv, import.meta.url);
