@@ -11,5 +11,5 @@ export function setPnpmWorkerScriptPath(): void {
 
 	const bunGlobal = (globalThis as typeof globalThis & { Bun: BunGlobal }).Bun;
 
-	process.env.PNPM_WORKER_SCRIPT_PATH = `${dirname(bunGlobal.main).replaceAll("\\", "/")}/node_modules/@pnpm/worker/lib/worker.js`;
+	process.env.PNPM_WORKER_SCRIPT_PATH = `${dirname(bunGlobal.main).replaceAll("\\", "/")}/vendor/pnpm-worker/lib/worker.js`;
 }

@@ -15,7 +15,7 @@
 		"check": "concurrently --group \"prettier --check .\" \"eslint . --no-cache -f unix\" \"tsc --noEmit --pretty false\" \"knip --no-progress\" \"jscpd .\"",
 		"unit": "vitest run unit",
 		"integration": "vitest run integration",
-		"build": "bun build --compile --minify --target=bun-windows-x64 --outfile dist/znpm.exe src/znpm.ts node_modules/@pnpm/worker/lib/worker.js && bun build --compile --minify --target=bun-windows-x64 --outfile dist/npm.exe src/shadow.ts node_modules/@pnpm/worker/lib/worker.js && bun build --compile --minify --target=bun-linux-x64 --outfile dist/znpm src/znpm.ts node_modules/@pnpm/worker/lib/worker.js && bun build --compile --minify --target=bun-linux-x64 --outfile dist/npm src/shadow.ts node_modules/@pnpm/worker/lib/worker.js",
+		"build": "bun build --compile --minify --target=bun-windows-x64 --outfile dist/znpm.exe src/znpm.ts vendor/pnpm-worker/lib/worker.js && bun build --compile --minify --target=bun-windows-x64 --outfile dist/npm.exe src/shadow.ts vendor/pnpm-worker/lib/worker.js && bun build --compile --minify --target=bun-linux-x64 --outfile dist/znpm src/znpm.ts vendor/pnpm-worker/lib/worker.js && bun build --compile --minify --target=bun-linux-x64 --outfile dist/npm src/shadow.ts vendor/pnpm-worker/lib/worker.js",
 		"start": "tsx src/znpm.ts"
 	},
 	"dependencies": {
