@@ -2,8 +2,10 @@ import { spawnSync } from "node:child_process";
 import { homeDirectoryOf } from "./home";
 import { resolveRealNpm, type RealNpm } from "./realNpm";
 import { runCli } from "./utils/runCli";
+import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
 
+setPnpmWorkerScriptPath();
 runCli(main);
 
 function main(): void {

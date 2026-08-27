@@ -9,6 +9,9 @@
 		"markdownlint-cli2",
 		"textlint",
 		"textlint-filter-rule-comments",
-		"textlint-rule-no-dead-link"
+		"textlint-rule-no-dead-link",
+		"@pnpm/store-connection-manager",
+		"@pnpm/store-path",
+		"@pnpm/worker"
 	]
 }

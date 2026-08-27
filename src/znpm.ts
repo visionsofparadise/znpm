@@ -27,8 +27,10 @@ import {
 import { realNpmPathOf } from "./realNpm";
 import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 import { runCli } from "./utils/runCli";
+import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
 
+setPnpmWorkerScriptPath();
 runCli(main);
 
 function main(): void {

@@ -1,6 +1,6 @@
 {
 	"gitignore": true,
-	"ignores": ["**/.*/**"],
+	"ignores": ["**/.*/**", "vendor/**"],
 	"noProgress": true,
 	"noBanner": true,
 	"config": {

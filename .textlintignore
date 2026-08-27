@@ -6,4 +6,5 @@
 **/coverage/**
 **/.scratch/**
 **/scratch/**
+vendor/**
 tmp_*
