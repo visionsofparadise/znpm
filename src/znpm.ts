@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { getStorePath } from "@pnpm/store-path";
 import {
 	applyWindowsMachinePath,
 	applyWindowsUserPath,
@@ -24,8 +25,10 @@ import {
 	writeState,
 	type PathChange,
 } from "./home";
+import { pnpmHomeDirectoryOf } from "./pnpmHome";
 import { pruneStoreDirectories } from "./prune";
 import { realNpmPathOf } from "./realNpm";
+import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
 import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
@@ -93,11 +96,21 @@ function main(): void | Promise<void> {
 }
 
 async function gc(): Promise<void> {
-	const override = process.env.ZNPM_STORE_DIR;
-	const storeDirectories =
-		override !== undefined && override !== "" ? [override] : volumeStoreDirectoriesOf(process.env, process.platform);
+	const override = storeDirectoryOverrideOf(process.env);
 
-	await pruneStoreDirectories(storeDirectories);
+	if (override !== undefined) {
+		const storeDirectory = await getStorePath({
+			pkgRoot: process.cwd(),
+			storePath: override,
+			pnpmHomeDir: pnpmHomeDirectoryOf(process.env, process.platform),
+		});
+
+		await pruneStoreDirectories([storeDirectory]);
+
+		return;
+	}
+
+	await pruneStoreDirectories(volumeStoreDirectoriesOf(process.env, process.platform));
 }
 
 function placeShim(): void {

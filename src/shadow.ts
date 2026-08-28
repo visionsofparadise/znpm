@@ -4,6 +4,7 @@ import { homeDirectoryOf } from "./home";
 import { npmCacheDirectoryOf } from "./npmCache";
 import { pnpmHomeDirectoryOf } from "./pnpmHome";
 import { resolveRealNpm, type RealNpm } from "./realNpm";
+import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
 import { candidateTreeDirectoriesOf, hiddenLockfileStatOf, type HiddenLockfileStat } from "./targetTrees";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
@@ -54,11 +55,11 @@ async function convertChangedTrees(realNpm: RealNpm, npmArguments: Array<string>
 }
 
 async function convertCandidate(projectDirectory: string): Promise<void> {
-	const storeDirectory = process.env.ZNPM_STORE_DIR;
+	const storeDirectory = storeDirectoryOverrideOf(process.env);
 
 	try {
 		const summary = await convert(projectDirectory, {
-			...(storeDirectory !== undefined && storeDirectory !== "" ? { storeDirectory } : {}),
+			...(storeDirectory === undefined ? {} : { storeDirectory }),
 			pnpmHomeDirectory: pnpmHomeDirectoryOf(process.env, process.platform),
 			npmCacheDirectory: npmCacheDirectoryOf(process.env, process.platform),
 		});

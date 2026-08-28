@@ -51,7 +51,7 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 				...process.env,
 				LOCALAPPDATA: workspace.localAppData,
 				HOME: workspace.root,
-				ZNPM_STORE_DIR: summary.storeDirectory,
+				ZNPM_STORE_DIR: workspace.store,
 			},
 			timeout: 60_000,
 		});

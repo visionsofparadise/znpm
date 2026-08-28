@@ -32,7 +32,7 @@ export async function convert(
 ): Promise<ConvertSummary> {
 	const storeDirectory = await getStorePath({
 		pkgRoot: projectDirectory,
-		storePath: options.storeDirectory,
+		storePath: options.storeDirectory === undefined ? undefined : resolve(options.storeDirectory),
 		pnpmHomeDir: options.pnpmHomeDirectory,
 	});
 	const hiddenLockfile = readHiddenLockfile(projectDirectory);
