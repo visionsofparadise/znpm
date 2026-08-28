@@ -98,16 +98,16 @@ function readWindowsRegistryPath(scope: "machine" | "user"): { value: string; ki
 $key = $root.OpenSubKey($subKey, $false)
 if ($null -eq $key) { throw "znpm could not open the $scope PATH key" }
 try {
-  $kind = 2
-  $value = ""
-  try {
+  if (-not ($key.GetValueNames() | Where-Object { $_ -ieq "Path" })) {
+    @{ kind = 2; value = "" } | ConvertTo-Json -Compress
+  } else {
     $kind = [int]$key.GetValueKind("Path")
     $raw = $key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
     if ($null -eq $raw) { $value = "" }
     elseif ($raw -is [string[]]) { $value = ($raw -join ";") }
     else { $value = [string]$raw }
-  } catch { }
-  @{ kind = $kind; value = $value } | ConvertTo-Json -Compress
+    @{ kind = $kind; value = $value } | ConvertTo-Json -Compress
+  }
 } finally {
   $key.Close()
 }
