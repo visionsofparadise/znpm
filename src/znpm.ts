@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { getStorePath } from "@pnpm/store-path";
+import { finishWorkers } from "@pnpm/worker";
 import {
 	appDirectoryOf,
 	binDirectoryOf,
@@ -105,7 +106,11 @@ async function gc(): Promise<void> {
 		return;
 	}
 
-	await pruneStoreDirectories([storeDirectory]);
+	try {
+		await pruneStoreDirectories([storeDirectory]);
+	} finally {
+		await finishWorkers();
+	}
 }
 
 function placeShim(): void {

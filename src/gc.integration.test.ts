@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { restartWorkerPool } from "@pnpm/worker";
 import { afterEach, describe, expect, it } from "vitest";
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
@@ -21,7 +22,9 @@ interface Workspace {
 describe("znpm gc", { timeout: 180_000 }, () => {
 	const workspaces: Array<string> = [];
 
-	afterEach(() => {
+	afterEach(async () => {
+		await restartWorkerPool();
+
 		for (const root of workspaces.splice(0)) {
 			rmSync(root, { recursive: true, force: true });
 		}

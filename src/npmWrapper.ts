@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { finishWorkers } from "@pnpm/worker";
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
 import { isTreeMutatingNpmCommand } from "./isTreeMutatingNpmCommand";
@@ -45,8 +46,12 @@ async function convertAfterNpm(npm: Npm, npmArguments: Array<string>): Promise<v
 	const candidates = candidateTreeDirectoriesOf(process.cwd(), npmArguments);
 	const status = spawnNpm(npm, npmArguments, { ...process.env, ZNPM_INTERNAL: "1" });
 
-	for (const candidate of candidates) {
-		await convertCandidate(candidate);
+	try {
+		for (const candidate of candidates) {
+			await convertCandidate(candidate);
+		}
+	} finally {
+		await finishWorkers();
 	}
 
 	process.exit(status);

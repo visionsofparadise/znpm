@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNewStoreController } from "@pnpm/store-connection-manager";
 import { getStorePath } from "@pnpm/store-path";
-import { finishWorkers } from "@pnpm/worker";
+import { calcMaxWorkers } from "@pnpm/worker";
 import { batchesByDepthOf } from "./batchesByDepthOf";
 import { detachPackageDirectory } from "./detach";
 import { readHiddenLockfile, wantedPackagesOf, type Resolution, type WantedPackage } from "./hiddenLockfile";
@@ -132,7 +132,6 @@ export async function convert(
 		}
 
 		await storeController.close();
-		await finishWorkers();
 	}
 
 	return {
@@ -295,7 +294,7 @@ async function importBatch(
 	let imported = 0;
 	let failed = 0;
 	let cacheMisses = 0;
-	const workerCount = 20;
+	const workerCount = Math.max(1, Math.min(4, calcMaxWorkers()));
 
 	const worker = async (): Promise<void> => {
 		for (;;) {

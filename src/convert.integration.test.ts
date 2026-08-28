@@ -14,6 +14,7 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { restartWorkerPool } from "@pnpm/worker";
 import { afterEach, describe, expect, it } from "vitest";
 import { appDirectoryOf } from "./appData";
 import { convert, type ConvertSummary } from "./convert";
@@ -32,7 +33,9 @@ interface Workspace {
 describe("convert", { timeout: 180_000 }, () => {
 	const workspaces: Array<string> = [];
 
-	afterEach(() => {
+	afterEach(async () => {
+		await restartWorkerPool();
+
 		for (const root of workspaces.splice(0)) {
 			rmSync(root, { recursive: true, force: true });
 		}
