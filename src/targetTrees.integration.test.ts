@@ -29,27 +29,27 @@ describe("candidateTreeDirectoriesOf", () => {
 	});
 
 	it("walks up from cwd collecting directories that hold package.json or node_modules", () => {
-		const candidates = candidateTreeDirectoriesOf(leafProject, []);
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(leafProject, []);
 
-		expect(candidates.slice(0, 3)).toEqual(
+		expect(candidateTreeDirectories.slice(0, 3)).toEqual(
 			[leafProject, midProject, rootProject].map((directory) => resolve(directory)),
 		);
-		expect(candidates).not.toContain(resolve(emptyLeaf));
+		expect(candidateTreeDirectories).not.toContain(resolve(emptyLeaf));
 	});
 
 	it("includes cwd itself when it qualifies", () => {
-		const candidates = candidateTreeDirectoriesOf(rootProject, []);
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(rootProject, []);
 
-		expect(candidates[0]).toBe(resolve(rootProject));
+		expect(candidateTreeDirectories[0]).toBe(resolve(rootProject));
 	});
 
 	it("walks through a cwd that does not itself qualify", () => {
-		const candidates = candidateTreeDirectoriesOf(emptyLeaf, []);
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(emptyLeaf, []);
 
-		expect(candidates.slice(0, 3)).toEqual(
+		expect(candidateTreeDirectories.slice(0, 3)).toEqual(
 			[leafProject, midProject, rootProject].map((directory) => resolve(directory)),
 		);
-		expect(candidates).not.toContain(resolve(emptyLeaf));
+		expect(candidateTreeDirectories).not.toContain(resolve(emptyLeaf));
 	});
 
 	it("includes --prefix and -C values for both separators, resolved against cwd", () => {
@@ -63,7 +63,7 @@ describe("candidateTreeDirectoriesOf", () => {
 		mkdirSync(bySpaceC, { recursive: true });
 		mkdirSync(byEqualsC, { recursive: true });
 
-		const candidates = candidateTreeDirectoriesOf(rootProject, [
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(rootProject, [
 			"--prefix",
 			join("..", "by-space-prefix"),
 			`--prefix=${byEqualsPrefix}`,
@@ -72,7 +72,7 @@ describe("candidateTreeDirectoriesOf", () => {
 			`-C=${join("..", "nested", "by-equals-c")}`,
 		]);
 
-		expect(candidates).toEqual(
+		expect(candidateTreeDirectories).toEqual(
 			expect.arrayContaining([
 				resolve(bySpacePrefix),
 				resolve(byEqualsPrefix),
@@ -83,7 +83,7 @@ describe("candidateTreeDirectoriesOf", () => {
 	});
 
 	it("deduplicates the walk-up chain and a prefix that resolve to the same directory", () => {
-		const candidates = candidateTreeDirectoriesOf(leafProject, [
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(leafProject, [
 			"--prefix",
 			".",
 			"-C",
@@ -92,17 +92,24 @@ describe("candidateTreeDirectoriesOf", () => {
 		]);
 		const resolvedLeaf = resolve(leafProject);
 		const resolvedMid = resolve(midProject);
-		const matchingLeaf = candidates.filter((directory) => identityKeyOf(directory) === identityKeyOf(resolvedLeaf));
-		const matchingMid = candidates.filter((directory) => identityKeyOf(directory) === identityKeyOf(resolvedMid));
+		const matchingLeaf = candidateTreeDirectories.filter(
+			(candidateTreeDirectory) => identityKeyOf(candidateTreeDirectory) === identityKeyOf(resolvedLeaf),
+		);
+		const matchingMid = candidateTreeDirectories.filter(
+			(candidateTreeDirectory) => identityKeyOf(candidateTreeDirectory) === identityKeyOf(resolvedMid),
+		);
 
 		expect(matchingLeaf).toHaveLength(1);
 		expect(matchingMid).toHaveLength(1);
 	});
 
 	it.skipIf(process.platform !== "win32")("deduplicates by resolved path case-insensitively", () => {
-		const candidates = candidateTreeDirectoriesOf(leafProject, ["--prefix", leafProject.toUpperCase()]);
-		const matching = candidates.filter(
-			(directory) => identityKeyOf(directory) === identityKeyOf(resolve(leafProject)),
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(leafProject, [
+			"--prefix",
+			leafProject.toUpperCase(),
+		]);
+		const matching = candidateTreeDirectories.filter(
+			(candidateTreeDirectory) => identityKeyOf(candidateTreeDirectory) === identityKeyOf(resolve(leafProject)),
 		);
 
 		expect(matching).toHaveLength(1);

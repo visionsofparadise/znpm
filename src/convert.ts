@@ -1,11 +1,12 @@
-import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNewStoreController } from "@pnpm/store-connection-manager";
 import { getStorePath } from "@pnpm/store-path";
 import { calcMaxWorkers } from "@pnpm/worker";
 import { batchesByDepthOf } from "./batchesByDepthOf";
+import { classifiedCandidatePackagesOf } from "./classifiedCandidatePackagesOf";
 import { detachPackageDirectory } from "./detach";
-import { readHiddenLockfile, wantedPackagesOf, type Resolution, type WantedPackage } from "./hiddenLockfile";
+import { readHiddenLockfile, candidatePackagesOf, type Resolution, type CandidatePackage } from "./hiddenLockfile";
 import { cacacheTarballPathOf } from "./npmCache";
 import { sealPackageDirectory } from "./seal";
 import { storeControllerOptionsOf } from "./storeController";
@@ -43,57 +44,11 @@ export async function convert(
 		return emptySummary(storeDirectory);
 	}
 
-	const { wanted, notATarball } = wantedPackagesOf(hiddenLockfile);
-	const ignoreNames = ignoreNamesOf(projectDirectory);
-	const unplaced: Array<WantedPackage> = [];
-	const ignored: Array<WantedPackage> = [];
-	const symlinked: Array<WantedPackage> = [];
-	const selfBuilding: Array<WantedPackage> = [];
-	const stale: Array<WantedPackage> = [];
-	const linked: Array<WantedPackage> = [];
-	const toImport: Array<WantedPackage> = [];
-
-	for (const wantedPackage of wanted) {
-		const packageDirectory = join(projectDirectory, wantedPackage.location);
-
-		if (!isPlaced(packageDirectory)) {
-			unplaced.push(wantedPackage);
-
-			continue;
-		}
-
-		if (ignoreNames.has(wantedPackage.name)) {
-			ignored.push(wantedPackage);
-
-			continue;
-		}
-
-		if (isSymbolicLink(packageDirectory)) {
-			symlinked.push(wantedPackage);
-
-			continue;
-		}
-
-		if (isSelfBuilding(packageDirectory)) {
-			selfBuilding.push(wantedPackage);
-
-			continue;
-		}
-
-		if (isStale(packageDirectory, wantedPackage.version)) {
-			stale.push(wantedPackage);
-
-			continue;
-		}
-
-		if (isLinked(packageDirectory, wantedPackage.version)) {
-			linked.push(wantedPackage);
-
-			continue;
-		}
-
-		toImport.push(wantedPackage);
-	}
+	const { candidatePackages, notATarball } = candidatePackagesOf(hiddenLockfile);
+	const { unplaced, ignored, symlinked, selfBuilding, stale, linked, toImport } = classifiedCandidatePackagesOf(
+		projectDirectory,
+		candidatePackages,
+	);
 
 	let detachedFiles = 0;
 
@@ -136,7 +91,7 @@ export async function convert(
 
 	return {
 		entries: packageEntryCountOf(hiddenLockfile),
-		tarballs: wanted.length,
+		tarballs: candidatePackages.length,
 		notATarball,
 		unplaced: unplaced.length,
 		stale: stale.length,
@@ -171,85 +126,10 @@ function emptySummary(storeDirectory: string): ConvertSummary {
 	};
 }
 
-function ignoreNamesOf(projectDirectory: string): Set<string> {
-	try {
-		const manifest: unknown = JSON.parse(readFileSync(join(projectDirectory, "package.json"), "utf8"));
-
-		if (!isRecord(manifest) || !isRecord(manifest.znpm) || !Array.isArray(manifest.znpm.ignore)) {
-			return new Set();
-		}
-
-		return new Set(manifest.znpm.ignore.filter((name): name is string => typeof name === "string"));
-	} catch {
-		return new Set();
-	}
-}
-
-function isPlaced(packageDirectory: string): boolean {
-	return existsSync(join(packageDirectory, "package.json"));
-}
-
 function isSymbolicLink(packageDirectory: string): boolean {
 	const stats = lstatSync(packageDirectory, { throwIfNoEntry: false });
 
 	return stats?.isSymbolicLink() === true;
-}
-
-function isSelfBuilding(packageDirectory: string): boolean {
-	if (existsSync(join(packageDirectory, "binding.gyp"))) {
-		return true;
-	}
-
-	try {
-		const manifest: unknown = JSON.parse(readFileSync(join(packageDirectory, "package.json"), "utf8"));
-		const scripts = isRecord(manifest) && isRecord(manifest.scripts) ? manifest.scripts : {};
-
-		return ["install", "preinstall", "postinstall", "prepare"].some((name) => {
-			const script = scripts[name];
-
-			return typeof script === "string" && script !== "";
-		});
-	} catch {
-		return false;
-	}
-}
-
-function isStale(packageDirectory: string, wantedVersion: string | undefined): boolean {
-	if (wantedVersion === undefined) {
-		return false;
-	}
-
-	return manifestVersionOf(packageDirectory) !== wantedVersion;
-}
-
-function isLinked(packageDirectory: string, wantedVersion: string | undefined): boolean {
-	const manifestPath = join(packageDirectory, "package.json");
-
-	try {
-		if (statSync(manifestPath).nlink < 2) {
-			return false;
-		}
-
-		const version = manifestVersionOf(packageDirectory);
-
-		return wantedVersion === undefined || version === wantedVersion;
-	} catch {
-		return true;
-	}
-}
-
-function manifestVersionOf(packageDirectory: string): string | undefined {
-	try {
-		const manifest: unknown = JSON.parse(readFileSync(join(packageDirectory, "package.json"), "utf8"));
-
-		if (isRecord(manifest) && typeof manifest.version === "string") {
-			return manifest.version;
-		}
-
-		return undefined;
-	} catch {
-		return undefined;
-	}
 }
 
 function packageEntryCountOf(hiddenLockfile: unknown): number {
@@ -261,29 +141,29 @@ function packageEntryCountOf(hiddenLockfile: unknown): number {
 }
 
 function fetchResolutionOf(
-	wantedPackage: WantedPackage,
+	candidatePackage: CandidatePackage,
 	npmCacheDirectory: string,
 ): { resolution: Resolution; cacheMiss: boolean } {
-	if (!("tarball" in wantedPackage.resolution)) {
-		return { resolution: wantedPackage.resolution, cacheMiss: false };
+	if (!("tarball" in candidatePackage.resolution)) {
+		return { resolution: candidatePackage.resolution, cacheMiss: false };
 	}
 
-	const cacachePath = cacacheTarballPathOf(npmCacheDirectory, wantedPackage.resolution.integrity);
+	const cacachePath = cacacheTarballPathOf(npmCacheDirectory, candidatePackage.resolution.integrity);
 
 	if (cacachePath !== undefined && existsSync(cacachePath)) {
 		return {
-			resolution: { tarball: `file:${resolve(cacachePath)}`, integrity: wantedPackage.resolution.integrity },
+			resolution: { tarball: `file:${resolve(cacachePath)}`, integrity: candidatePackage.resolution.integrity },
 			cacheMiss: false,
 		};
 	}
 
-	return { resolution: wantedPackage.resolution, cacheMiss: true };
+	return { resolution: candidatePackage.resolution, cacheMiss: true };
 }
 
 type StoreController = Awaited<ReturnType<typeof createNewStoreController>>["ctrl"];
 
 async function importBatch(
-	batch: Array<WantedPackage>,
+	batch: Array<CandidatePackage>,
 	options: {
 		projectDirectory: string;
 		npmCacheDirectory: string;
@@ -304,13 +184,13 @@ async function importBatch(
 				return;
 			}
 
-			const wantedPackage = batch[index];
+			const candidatePackage = batch[index];
 
-			if (wantedPackage === undefined) {
+			if (candidatePackage === undefined) {
 				return;
 			}
 
-			const { resolution, cacheMiss } = fetchResolutionOf(wantedPackage, options.npmCacheDirectory);
+			const { resolution, cacheMiss } = fetchResolutionOf(candidatePackage, options.npmCacheDirectory);
 
 			if (cacheMiss) {
 				cacheMisses++;
@@ -323,9 +203,9 @@ async function importBatch(
 					ignoreScripts: true,
 					// eslint-disable-next-line id-denylist
 					pkg: {
-						id: `${wantedPackage.name}@${wantedPackage.version}`,
-						name: wantedPackage.name,
-						version: wantedPackage.version,
+						id: `${candidatePackage.name}@${candidatePackage.version}`,
+						name: candidatePackage.name,
+						version: candidatePackage.version,
 						resolution,
 					},
 				});
@@ -336,13 +216,13 @@ async function importBatch(
 
 				const files = (await fetchResponse.fetching()).files;
 
-				await options.storeController.importPackage(join(options.projectDirectory, wantedPackage.location), {
+				await options.storeController.importPackage(join(options.projectDirectory, candidatePackage.location), {
 					filesResponse: files,
 					force: true,
 					keepModulesDir: true,
 					requiresBuild: false,
 				});
-				sealPackageDirectory(join(options.projectDirectory, wantedPackage.location));
+				sealPackageDirectory(join(options.projectDirectory, candidatePackage.location));
 				imported++;
 			} catch {
 				failed++;

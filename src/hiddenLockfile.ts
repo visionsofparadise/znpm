@@ -4,7 +4,7 @@ import { isRecord } from "./utils/isRecord";
 
 export type Resolution = { tarball: string; integrity: string } | { type: "git"; repo: string; commit: string };
 
-export interface WantedPackage {
+export interface CandidatePackage {
 	location: string;
 	name: string;
 	version: string | undefined;
@@ -27,8 +27,11 @@ export function readHiddenLockfile(projectDirectory: string): unknown {
 	}
 }
 
-export function wantedPackagesOf(hiddenLockfile: unknown): { wanted: Array<WantedPackage>; notATarball: number } {
-	const wanted: Array<WantedPackage> = [];
+export function candidatePackagesOf(hiddenLockfile: unknown): {
+	candidatePackages: Array<CandidatePackage>;
+	notATarball: number;
+} {
+	const candidatePackages: Array<CandidatePackage> = [];
 	let notATarball = 0;
 
 	for (const [location, entry] of Object.entries(packagesOf(hiddenLockfile))) {
@@ -60,7 +63,7 @@ export function wantedPackagesOf(hiddenLockfile: unknown): { wanted: Array<Wante
 				? tarballBasename.slice(barePackageName.length + 1, -4)
 				: undefined;
 
-		wanted.push({
+		candidatePackages.push({
 			location,
 			name,
 			version: versionFromTarball ?? (typeof entry.version === "string" ? entry.version : undefined),
@@ -68,7 +71,7 @@ export function wantedPackagesOf(hiddenLockfile: unknown): { wanted: Array<Wante
 		});
 	}
 
-	return { wanted, notATarball };
+	return { candidatePackages, notATarball };
 }
 
 function packagesOf(hiddenLockfile: unknown): Record<string, unknown> {

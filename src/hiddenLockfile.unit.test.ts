@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readHiddenLockfile, wantedPackagesOf, type Resolution } from "./hiddenLockfile";
+import { readHiddenLockfile, candidatePackagesOf, type Resolution } from "./hiddenLockfile";
 
 describe("readHiddenLockfile", () => {
 	it("returns undefined when the hidden lockfile is absent", () => {
@@ -8,9 +8,9 @@ describe("readHiddenLockfile", () => {
 	});
 });
 
-describe("wantedPackagesOf", () => {
+describe("candidatePackagesOf", () => {
 	it("takes the name from an aliased entry rather than the path", () => {
-		const { wanted, notATarball } = wantedPackagesOf({
+		const { candidatePackages, notATarball } = candidatePackagesOf({
 			packages: {
 				"node_modules/foo": {
 					name: "bar",
@@ -22,7 +22,7 @@ describe("wantedPackagesOf", () => {
 		});
 
 		expect(notATarball).toBe(0);
-		expect(wanted).toEqual([
+		expect(candidatePackages).toEqual([
 			{
 				location: "node_modules/foo",
 				name: "bar",
@@ -36,7 +36,7 @@ describe("wantedPackagesOf", () => {
 	});
 
 	it("anchors the version on the bare package name so babel-walk-3.0.0-canary-5 is not version 5", () => {
-		const { wanted } = wantedPackagesOf({
+		const { candidatePackages } = candidatePackagesOf({
 			packages: {
 				"node_modules/babel-walk": {
 					version: "3.0.0-canary-5",
@@ -46,12 +46,12 @@ describe("wantedPackagesOf", () => {
 			},
 		});
 
-		expect(wanted[0]?.name).toBe("babel-walk");
-		expect(wanted[0]?.version).toBe("3.0.0-canary-5");
+		expect(candidatePackages[0]?.name).toBe("babel-walk");
+		expect(candidatePackages[0]?.version).toBe("3.0.0-canary-5");
 	});
 
 	it("takes the version from resolved over the lockfile entry", () => {
-		const { wanted } = wantedPackagesOf({
+		const { candidatePackages } = candidatePackagesOf({
 			packages: {
 				"node_modules/micromark-extension-gfm": {
 					version: "0.4.0",
@@ -61,11 +61,11 @@ describe("wantedPackagesOf", () => {
 			},
 		});
 
-		expect(wanted[0]?.version).toBe("0.3.3");
+		expect(candidatePackages[0]?.version).toBe("0.3.3");
 	});
 
 	it("normalizes git+ssh GitHub URLs to https", () => {
-		const { wanted, notATarball } = wantedPackagesOf({
+		const { candidatePackages, notATarball } = candidatePackagesOf({
 			packages: {
 				"node_modules/some-git-dep": {
 					version: "1.0.0",
@@ -81,7 +81,7 @@ describe("wantedPackagesOf", () => {
 		};
 
 		expect(notATarball).toBe(0);
-		expect(wanted).toEqual([
+		expect(candidatePackages).toEqual([
 			{
 				location: "node_modules/some-git-dep",
 				name: "some-git-dep",
@@ -92,7 +92,7 @@ describe("wantedPackagesOf", () => {
 	});
 
 	it("skips link: true and bundled entries that carry no resolved", () => {
-		const { wanted, notATarball } = wantedPackagesOf({
+		const { candidatePackages, notATarball } = candidatePackagesOf({
 			packages: {
 				"node_modules/local": {
 					link: true,
@@ -105,7 +105,7 @@ describe("wantedPackagesOf", () => {
 			},
 		});
 
-		expect(wanted).toEqual([]);
+		expect(candidatePackages).toEqual([]);
 		expect(notATarball).toBe(2);
 	});
 });

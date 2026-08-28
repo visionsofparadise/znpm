@@ -85,7 +85,7 @@ describe("resolveNpm on Windows", () => {
 		]);
 	});
 
-	it("skips a candidate sitting in the shim directory", () => {
+	it("skips a candidate npm path sitting in the shim directory", () => {
 		const env = { PATH: pathOf([shimDirectoryOf(appDirectory), nodejsDirectory]) };
 
 		expect(resolveNpm(env, appDirectory).command).toBe(join(nodejsDirectory, "node.exe"));
@@ -156,13 +156,13 @@ describe("resolveNpm on POSIX", () => {
 		expect(resolveNpm(env, appDirectory)).toEqual({ command: join(npmDirectory, "npm"), argsPrefix: [] });
 	});
 
-	it("skips a candidate sitting in the shim directory", () => {
+	it("skips a candidate npm path sitting in the shim directory", () => {
 		const env = { PATH: pathOf([shimDirectoryOf(appDirectory), npmDirectory]) };
 
 		expect(resolveNpm(env, appDirectory).command).toBe(join(npmDirectory, "npm"));
 	});
 
-	it("skips a candidate whose canonical path is the npm wrapper binary", () => {
+	it("skips a candidate npm path whose canonical path is the npm wrapper binary", () => {
 		const linkedDirectory = join(temporaryRoot, "linked");
 
 		symlinkSync(appDirectory, linkedDirectory, "junction");

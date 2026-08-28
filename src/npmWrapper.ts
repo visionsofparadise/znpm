@@ -43,12 +43,12 @@ async function main(): Promise<void> {
 }
 
 async function convertAfterNpm(npm: Npm, npmArguments: Array<string>): Promise<void> {
-	const candidates = candidateTreeDirectoriesOf(process.cwd(), npmArguments);
+	const candidateTreeDirectories = candidateTreeDirectoriesOf(process.cwd(), npmArguments);
 	const status = spawnNpm(npm, npmArguments, { ...process.env, ZNPM_INTERNAL: "1" });
 
 	try {
-		for (const candidate of candidates) {
-			await convertCandidate(candidate);
+		for (const candidateTreeDirectory of candidateTreeDirectories) {
+			await convertCandidateTreeDirectory(candidateTreeDirectory);
 		}
 	} finally {
 		await finishWorkers();
@@ -57,7 +57,7 @@ async function convertAfterNpm(npm: Npm, npmArguments: Array<string>): Promise<v
 	process.exit(status);
 }
 
-async function convertCandidate(projectDirectory: string): Promise<void> {
+async function convertCandidateTreeDirectory(projectDirectory: string): Promise<void> {
 	const storeDirectory = storeDirectoryOverrideOf(process.env);
 
 	try {

@@ -31,21 +31,21 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | 
 			continue;
 		}
 
-		const candidate = join(entry, npmName);
+		const candidateNpmPath = join(entry, npmName);
 
-		if (!existsSync(candidate)) {
+		if (!existsSync(candidateNpmPath)) {
 			continue;
 		}
 
-		if (canonicalPathOf(dirname(candidate)) === shimDirectory) {
+		if (canonicalPathOf(dirname(candidateNpmPath)) === shimDirectory) {
 			continue;
 		}
 
-		if (canonicalPathOf(candidate) === npmWrapperPath) {
+		if (canonicalPathOf(candidateNpmPath) === npmWrapperPath) {
 			continue;
 		}
 
-		return candidate;
+		return candidateNpmPath;
 	}
 
 	return undefined;

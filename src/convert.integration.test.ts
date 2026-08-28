@@ -18,7 +18,7 @@ import { restartWorkerPool } from "@pnpm/worker";
 import { afterEach, describe, expect, it } from "vitest";
 import { appDirectoryOf } from "./appData";
 import { convert, type ConvertSummary } from "./convert";
-import { readHiddenLockfile, wantedPackagesOf } from "./hiddenLockfile";
+import { readHiddenLockfile, candidatePackagesOf } from "./hiddenLockfile";
 import { resolveNpm } from "./npm";
 import { cacacheTarballPathOf } from "./npmCache";
 import { pruneStoreDirectories } from "./prune";
@@ -287,7 +287,7 @@ describe("convert", { timeout: 180_000 }, () => {
 
 			runNpm(fixture, ["install"], workspace);
 
-			const victim = tarballWantedPackageOf(fixture, "abbrev");
+			const victim = tarballCandidatePackageOf(fixture, "abbrev");
 			const cacachePath = cacacheTarballPathOf(workspace.cache, victim.integrity);
 
 			expect(cacachePath).toBeDefined();
@@ -315,7 +315,7 @@ describe("convert", { timeout: 180_000 }, () => {
 
 			runNpm(fixture, ["install"], workspace);
 
-			const victim = tarballWantedPackageOf(fixture, "abbrev");
+			const victim = tarballCandidatePackageOf(fixture, "abbrev");
 			const cacachePath = cacacheTarballPathOf(workspace.cache, victim.integrity);
 
 			expect(cacachePath).toBeDefined();
@@ -580,10 +580,12 @@ function walkFiles(directory: string, visit: (filePath: string) => void): void {
 	}
 }
 
-function tarballWantedPackageOf(fixture: string, name: string): { integrity: string; version: string | undefined } {
+function tarballCandidatePackageOf(fixture: string, name: string): { integrity: string; version: string | undefined } {
 	const hiddenLockfile = readHiddenLockfile(fixture);
-	const { wanted } = wantedPackagesOf(hiddenLockfile);
-	const match = wanted.find((wantedPackage) => wantedPackage.name === name && "integrity" in wantedPackage.resolution);
+	const { candidatePackages } = candidatePackagesOf(hiddenLockfile);
+	const match = candidatePackages.find(
+		(candidatePackage) => candidatePackage.name === name && "integrity" in candidatePackage.resolution,
+	);
 
 	if (match === undefined || !("integrity" in match.resolution)) {
 		throw new Error(`znpm test found no tarball entry for ${name}`);
