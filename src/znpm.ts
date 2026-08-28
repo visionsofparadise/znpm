@@ -33,7 +33,6 @@ import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
-import { volumeStoreDirectoriesOf } from "./volumeStores";
 
 setPnpmWorkerScriptPath();
 await runCli(main);
@@ -96,21 +95,17 @@ function main(): void | Promise<void> {
 }
 
 async function gc(): Promise<void> {
-	const override = storeDirectoryOverrideOf(process.env);
+	const storeDirectory = await getStorePath({
+		pkgRoot: process.cwd(),
+		storePath: storeDirectoryOverrideOf(process.env),
+		pnpmHomeDir: pnpmHomeDirectoryOf(process.env, process.platform),
+	});
 
-	if (override !== undefined) {
-		const storeDirectory = await getStorePath({
-			pkgRoot: process.cwd(),
-			storePath: override,
-			pnpmHomeDir: pnpmHomeDirectoryOf(process.env, process.platform),
-		});
-
-		await pruneStoreDirectories([storeDirectory]);
-
+	if (!existsSync(storeDirectory)) {
 		return;
 	}
 
-	await pruneStoreDirectories(volumeStoreDirectoriesOf(process.env, process.platform));
+	await pruneStoreDirectories([storeDirectory]);
 }
 
 function placeShim(): void {

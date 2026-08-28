@@ -13,7 +13,6 @@ const tsxLoader = import.meta.resolve("tsx");
 
 interface Workspace {
 	root: string;
-	store: string;
 	cache: string;
 	pnpmHome: string;
 	localAppData: string;
@@ -35,7 +34,6 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 		runNpm(fixture, ["install"], workspace);
 
 		const summary = await convert(fixture, {
-			storeDirectory: workspace.store,
 			pnpmHomeDirectory: workspace.pnpmHome,
 			npmCacheDirectory: workspace.cache,
 		});
@@ -46,12 +44,13 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 		rmSync(fixture, { recursive: true, force: true });
 
 		const result = spawnSync(process.execPath, ["--import", tsxLoader, znpmScript, "gc"], {
+			cwd: workspace.root,
 			encoding: "utf8",
 			env: {
 				...process.env,
 				LOCALAPPDATA: workspace.localAppData,
 				HOME: workspace.root,
-				ZNPM_STORE_DIR: workspace.store,
+				PNPM_HOME: workspace.pnpmHome,
 			},
 			timeout: 60_000,
 		});
@@ -67,7 +66,6 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 
 		return {
 			root,
-			store: join(root, "store"),
 			cache: join(root, "npm-cache"),
 			pnpmHome: join(root, "pnpm-home"),
 			localAppData: join(root, "Local"),
