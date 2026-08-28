@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
-import { homeDirectoryOf } from "./home";
-import { resolveRealNpm } from "./realNpm";
+import { resolveNpm } from "./npm";
 
 const znpmScript = fileURLToPath(new URL("./znpm.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
@@ -14,7 +14,7 @@ const tsxLoader = import.meta.resolve("tsx");
 interface Workspace {
 	root: string;
 	cache: string;
-	pnpmHome: string;
+	pnpmAppDirectory: string;
 	localAppData: string;
 }
 
@@ -34,7 +34,7 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 		runNpm(fixture, ["install"], workspace);
 
 		const summary = await convert(fixture, {
-			pnpmHomeDirectory: workspace.pnpmHome,
+			pnpmAppDirectory: workspace.pnpmAppDirectory,
 			npmCacheDirectory: workspace.cache,
 		});
 		const storeFileCountBefore = fileCountOf(summary.storeDirectory);
@@ -50,7 +50,7 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 				...process.env,
 				LOCALAPPDATA: workspace.localAppData,
 				HOME: workspace.root,
-				PNPM_HOME: workspace.pnpmHome,
+				PNPM_HOME: workspace.pnpmAppDirectory,
 			},
 			timeout: 60_000,
 		});
@@ -67,7 +67,7 @@ describe("znpm gc", { timeout: 180_000 }, () => {
 		return {
 			root,
 			cache: join(root, "npm-cache"),
-			pnpmHome: join(root, "pnpm-home"),
+			pnpmAppDirectory: join(root, "pnpm-app"),
 			localAppData: join(root, "Local"),
 		};
 	}
@@ -88,7 +88,7 @@ function writeFixture(workspace: Workspace, name: string, dependencies: Record<s
 }
 
 function runNpm(cwd: string, npmArguments: Array<string>, workspace: Workspace): void {
-	const realNpm = resolveRealNpm({ ...process.env, ZNPM_DISABLE: "1" }, homeDirectoryOf(process.platform));
+	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.platform));
 	const env: NodeJS.ProcessEnv = { ...process.env, ZNPM_DISABLE: "1" };
 
 	for (const key of Object.keys(env)) {
@@ -102,7 +102,7 @@ function runNpm(cwd: string, npmArguments: Array<string>, workspace: Workspace):
 	env.npm_config_fund = "false";
 	env.npm_config_update_notifier = "false";
 
-	const result = spawnSync(realNpm.command, [...realNpm.argsPrefix, ...npmArguments, "--cache", workspace.cache], {
+	const result = spawnSync(npm.command, [...npm.argsPrefix, ...npmArguments, "--cache", workspace.cache], {
 		cwd,
 		encoding: "utf8",
 		env,

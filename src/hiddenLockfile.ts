@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isRecord } from "./utils/isRecord";
 
 export type Resolution = { tarball: string; integrity: string } | { type: "git"; repo: string; commit: string };
 
@@ -10,8 +11,7 @@ export interface WantedPackage {
 	resolution: Resolution;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-export function readHiddenLockfile(projectDirectory: string): unknown | undefined {
+export function readHiddenLockfile(projectDirectory: string): unknown {
 	const hiddenLockfilePath = join(projectDirectory, "node_modules", ".package-lock.json");
 
 	if (!existsSync(hiddenLockfilePath)) {
@@ -19,7 +19,7 @@ export function readHiddenLockfile(projectDirectory: string): unknown | undefine
 	}
 
 	try {
-		return JSON.parse(readFileSync(hiddenLockfilePath, "utf8")) as unknown;
+		return JSON.parse(readFileSync(hiddenLockfilePath, "utf8"));
 	} catch {
 		console.error(`znpm could not parse ${hiddenLockfilePath}`);
 
@@ -98,8 +98,4 @@ function resolutionOf(resolved: string, integrity: unknown): Resolution | undefi
 	}
 
 	return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
 }

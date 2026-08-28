@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export function pnpmHomeDirectoryOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
+export function pnpmAppDirectoryOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
 	if (env.PNPM_HOME !== undefined && env.PNPM_HOME !== "") {
 		return env.PNPM_HOME;
 	}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { changesToReverseOf, insertPathEntry, removePathEntry, upsertChange } from "./enablement";
-import { type PathChange, type State } from "./home";
+import { type PathChange, type State } from "./appData";
+import { changesToReverseOf, insertPathEntry, removePathEntry, upsertChange } from "./toggle";
 
 describe("insertPathEntry", () => {
 	it("prepends the entry", () => {
@@ -62,7 +62,7 @@ describe("changesToReverseOf", () => {
 
 describe("upsertChange", () => {
 	it("leaves changes duplicate-free on repeat enable", () => {
-		const empty: State = { enabled: false, changes: [], realNpmPath: undefined };
+		const empty: State = { enabled: false, changes: [], npmPath: undefined };
 		const machine: PathChange = { target: "windowsMachinePath", entry: "C:\\znpm\\shim" };
 		const user: PathChange = { target: "windowsUserPath", entry: "C:\\znpm\\bin" };
 		const once = upsertChange(upsertChange(empty, machine), user);

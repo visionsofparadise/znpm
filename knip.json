@@ -1,6 +1,6 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
-	"entry": ["src/shadow.ts"],
+	"entry": ["src/npmWrapper.ts"],
 	"project": ["src/**/*.{ts,tsx}"],
 	"ignore": [],
 	"ignoreDependencies": [

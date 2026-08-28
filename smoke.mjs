@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL(".", import.meta.url));
-const shadowBinary = join(repositoryRoot, "dist", process.platform === "win32" ? "npm.exe" : "npm");
+const npmWrapperBinary = join(repositoryRoot, "dist", process.platform === "win32" ? "npm.exe" : "npm");
 
-if (!existsSync(shadowBinary)) {
-	console.error(`missing compiled shadow at ${shadowBinary}`);
+if (!existsSync(npmWrapperBinary)) {
+	console.error(`missing compiled npm wrapper at ${npmWrapperBinary}`);
 	process.exit(1);
 }
 
@@ -25,7 +25,7 @@ writeFileSync(
 	"utf8",
 );
 
-const result = spawnSync(shadowBinary, ["install"], {
+const result = spawnSync(npmWrapperBinary, ["install"], {
 	cwd: fixtureDirectory,
 	env: childEnvironmentOf(workspaceRoot, storeDirectory, cacheDirectory),
 	stdio: "inherit",
@@ -47,7 +47,7 @@ if (result.error !== undefined) {
 }
 
 if (result.status !== 0) {
-	console.error(`compiled shadow install exited ${String(result.status)}`);
+	console.error(`compiled npm wrapper install exited ${String(result.status)}`);
 	process.exit(result.status ?? 1);
 }
 

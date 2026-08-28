@@ -1,14 +1,14 @@
 import { existsSync, realpathSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { readState, shadowPathOf, shimDirectoryOf } from "./home";
+import { npmWrapperPathOf, readState, shimDirectoryOf } from "./appData";
 
-export interface RealNpm {
+export interface Npm {
 	command: string;
 	argsPrefix: Array<string>;
 }
 
-export function realNpmPathOf(env: NodeJS.ProcessEnv, homeDirectory: string): string {
-	const npmPath = pathEntryNpmOf(env, homeDirectory) ?? readState(homeDirectory).realNpmPath;
+export function npmPathOf(env: NodeJS.ProcessEnv, appDirectory: string): string {
+	const npmPath = pathEntryNpmOf(env, appDirectory) ?? readState(appDirectory).npmPath;
 
 	if (npmPath === undefined) {
 		throw new Error("znpm found no real npm on PATH and none recorded in its state");
@@ -17,13 +17,13 @@ export function realNpmPathOf(env: NodeJS.ProcessEnv, homeDirectory: string): st
 	return npmPath;
 }
 
-export function resolveRealNpm(env: NodeJS.ProcessEnv, homeDirectory: string): RealNpm {
-	return realNpmOf(realNpmPathOf(env, homeDirectory));
+export function resolveNpm(env: NodeJS.ProcessEnv, appDirectory: string): Npm {
+	return npmOf(npmPathOf(env, appDirectory));
 }
 
-function pathEntryNpmOf(env: NodeJS.ProcessEnv, homeDirectory: string): string | undefined {
-	const shimDirectory = canonicalPathOf(shimDirectoryOf(homeDirectory));
-	const shadowPath = canonicalPathOf(shadowPathOf(homeDirectory));
+function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | undefined {
+	const shimDirectory = canonicalPathOf(shimDirectoryOf(appDirectory));
+	const npmWrapperPath = canonicalPathOf(npmWrapperPathOf(appDirectory));
 	const npmName = process.platform === "win32" ? "npm.cmd" : "npm";
 
 	for (const entry of (env.PATH ?? "").split(delimiter)) {
@@ -41,7 +41,7 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, homeDirectory: string): string |
 			continue;
 		}
 
-		if (canonicalPathOf(candidate) === shadowPath) {
+		if (canonicalPathOf(candidate) === npmWrapperPath) {
 			continue;
 		}
 
@@ -51,7 +51,7 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, homeDirectory: string): string |
 	return undefined;
 }
 
-function realNpmOf(npmPath: string): RealNpm {
+function npmOf(npmPath: string): Npm {
 	if (process.platform !== "win32") {
 		return { command: npmPath, argsPrefix: [] };
 	}

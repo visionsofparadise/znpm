@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
-import type { PathChange, State } from "./home";
+import { isRecord } from "./utils/isRecord";
+import type { PathChange, State } from "./appData";
 
 export const npmCommandForwarder = '@echo off\r\n"%~dp0npm.exe" %*\r\nexit /b %ERRORLEVEL%\r\n';
 
@@ -218,8 +219,4 @@ function symlinkPointsAt(linkPath: string, targetPath: string): boolean {
 
 function powershellSingleQuote(value: string): string {
 	return `'${value.replaceAll("'", "''")}'`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
 }

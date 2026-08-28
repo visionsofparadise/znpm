@@ -15,18 +15,18 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { appDirectoryOf } from "./appData";
 import { convert, type ConvertSummary } from "./convert";
-import { homeDirectoryOf } from "./home";
 import { readHiddenLockfile, wantedPackagesOf } from "./hiddenLockfile";
+import { resolveNpm } from "./npm";
 import { cacacheTarballPathOf } from "./npmCache";
 import { pruneStoreDirectories } from "./prune";
-import { resolveRealNpm } from "./realNpm";
 
 interface Workspace {
 	root: string;
 	store: string;
 	cache: string;
-	pnpmHome: string;
+	pnpmAppDirectory: string;
 }
 
 describe("convert", { timeout: 180_000 }, () => {
@@ -296,7 +296,7 @@ describe("convert", { timeout: 180_000 }, () => {
 			const freshStore = join(workspace.root, "store-miss");
 			const summary = await convert(fixture, {
 				storeDirectory: freshStore,
-				pnpmHomeDirectory: workspace.pnpmHome,
+				pnpmAppDirectory: workspace.pnpmAppDirectory,
 				npmCacheDirectory: workspace.cache,
 			});
 
@@ -329,7 +329,7 @@ describe("convert", { timeout: 180_000 }, () => {
 			const freshStore = join(workspace.root, "store-corrupt");
 			const summary = await convert(fixture, {
 				storeDirectory: freshStore,
-				pnpmHomeDirectory: workspace.pnpmHome,
+				pnpmAppDirectory: workspace.pnpmAppDirectory,
 				npmCacheDirectory: workspace.cache,
 			});
 			const abbrevManifest = join(fixture, "node_modules", "abbrev", "package.json");
@@ -427,7 +427,7 @@ describe("convert", { timeout: 180_000 }, () => {
 			root,
 			store: join(root, "store"),
 			cache: join(root, "npm-cache"),
-			pnpmHome: join(root, "pnpm-home"),
+			pnpmAppDirectory: join(root, "pnpm-app"),
 		};
 	}
 });
@@ -457,7 +457,7 @@ function writeFixtureManifest(fixture: string, dependencies: Record<string, stri
 async function convertProject(fixture: string, workspace: Workspace): Promise<ConvertSummary> {
 	return convert(fixture, {
 		storeDirectory: workspace.store,
-		pnpmHomeDirectory: workspace.pnpmHome,
+		pnpmAppDirectory: workspace.pnpmAppDirectory,
 		npmCacheDirectory: workspace.cache,
 	});
 }
@@ -467,7 +467,7 @@ function runNpm(
 	npmArguments: Array<string>,
 	workspace: Workspace,
 ): { stdout: string; stderr: string; status: number | null } {
-	const realNpm = resolveRealNpm({ ...process.env, ZNPM_DISABLE: "1" }, homeDirectoryOf(process.platform));
+	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.platform));
 	const env: NodeJS.ProcessEnv = { ...process.env, ZNPM_DISABLE: "1" };
 
 	for (const key of Object.keys(env)) {
@@ -484,7 +484,7 @@ function runNpm(
 	env.GIT_CONFIG_KEY_0 = "protocol.file.allow";
 	env.GIT_CONFIG_VALUE_0 = "always";
 
-	const result = spawnSync(realNpm.command, [...realNpm.argsPrefix, ...npmArguments, "--cache", workspace.cache], {
+	const result = spawnSync(npm.command, [...npm.argsPrefix, ...npmArguments, "--cache", workspace.cache], {
 		cwd,
 		encoding: "utf8",
 		env,

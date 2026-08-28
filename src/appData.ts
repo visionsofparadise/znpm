@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { isRecord } from "./utils/isRecord";
 
 export type PathChange =
 	| { target: "windowsMachinePath"; entry: string }
@@ -10,10 +11,10 @@ export type PathChange =
 export interface State {
 	enabled: boolean;
 	changes: Array<PathChange>;
-	realNpmPath: string | undefined;
+	npmPath: string | undefined;
 }
 
-export function homeDirectoryOf(platform: NodeJS.Platform): string {
+export function appDirectoryOf(platform: NodeJS.Platform): string {
 	if (platform === "win32") {
 		return join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "znpm");
 	}
@@ -21,23 +22,23 @@ export function homeDirectoryOf(platform: NodeJS.Platform): string {
 	return join(homedir(), ".local", "share", "znpm");
 }
 
-export function binDirectoryOf(homeDirectory: string): string {
-	return join(homeDirectory, "bin");
+export function binDirectoryOf(appDirectory: string): string {
+	return join(appDirectory, "bin");
 }
 
-export function shimDirectoryOf(homeDirectory: string): string {
-	return join(homeDirectory, "shim");
+export function shimDirectoryOf(appDirectory: string): string {
+	return join(appDirectory, "shim");
 }
 
-export function shadowPathOf(homeDirectory: string): string {
-	return join(homeDirectory, process.platform === "win32" ? "npm.exe" : "npm");
+export function npmWrapperPathOf(appDirectory: string): string {
+	return join(appDirectory, process.platform === "win32" ? "npm.exe" : "npm");
 }
 
-export function readState(homeDirectory: string): State {
-	const statePath = statePathOf(homeDirectory);
+export function readState(appDirectory: string): State {
+	const statePath = statePathOf(appDirectory);
 
 	if (!existsSync(statePath)) {
-		return { enabled: false, changes: [], realNpmPath: undefined };
+		return { enabled: false, changes: [], npmPath: undefined };
 	}
 
 	const parsed: unknown = JSON.parse(readFileSync(statePath, "utf8"));
@@ -45,18 +46,14 @@ export function readState(homeDirectory: string): State {
 	return stateOf(parsed);
 }
 
-export function writeState(homeDirectory: string, state: State): void {
-	mkdirSync(homeDirectory, { recursive: true });
+export function writeState(appDirectory: string, state: State): void {
+	mkdirSync(appDirectory, { recursive: true });
 
-	writeFileSync(statePathOf(homeDirectory), `${JSON.stringify(state, undefined, "\t")}\n`, "utf8");
+	writeFileSync(statePathOf(appDirectory), `${JSON.stringify(state, undefined, "\t")}\n`, "utf8");
 }
 
-function statePathOf(homeDirectory: string): string {
-	return join(homeDirectory, "state.json");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
+function statePathOf(appDirectory: string): string {
+	return join(appDirectory, "state.json");
 }
 
 function pathChangeOf(value: unknown): PathChange {
@@ -80,11 +77,11 @@ function stateOf(value: unknown): State {
 		throw new Error("znpm state.json is malformed");
 	}
 
-	const { realNpmPath } = value;
+	const { npmPath } = value;
 
-	if (realNpmPath !== undefined && typeof realNpmPath !== "string") {
+	if (npmPath !== undefined && typeof npmPath !== "string") {
 		throw new Error("znpm state.json is malformed");
 	}
 
-	return { enabled: value.enabled, changes: value.changes.map(pathChangeOf), realNpmPath };
+	return { enabled: value.enabled, changes: value.changes.map(pathChangeOf), npmPath };
 }

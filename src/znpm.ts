@@ -5,6 +5,19 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { getStorePath } from "@pnpm/store-path";
 import {
+	appDirectoryOf,
+	binDirectoryOf,
+	npmWrapperPathOf,
+	readState,
+	shimDirectoryOf,
+	writeState,
+	type PathChange,
+} from "./appData";
+import { npmPathOf } from "./npm";
+import { pnpmAppDirectoryOf } from "./pnpmAppData";
+import { pruneStoreDirectories } from "./prune";
+import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
+import {
 	applyWindowsMachinePath,
 	applyWindowsUserPath,
 	changesToReverseOf,
@@ -15,20 +28,7 @@ import {
 	removePathEntry,
 	removePosixSymlink,
 	upsertChange,
-} from "./enablement";
-import {
-	binDirectoryOf,
-	homeDirectoryOf,
-	readState,
-	shadowPathOf,
-	shimDirectoryOf,
-	writeState,
-	type PathChange,
-} from "./home";
-import { pnpmHomeDirectoryOf } from "./pnpmHome";
-import { pruneStoreDirectories } from "./prune";
-import { realNpmPathOf } from "./realNpm";
-import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
+} from "./toggle";
 import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
@@ -98,7 +98,7 @@ async function gc(): Promise<void> {
 	const storeDirectory = await getStorePath({
 		pkgRoot: process.cwd(),
 		storePath: storeDirectoryOverrideOf(process.env),
-		pnpmHomeDir: pnpmHomeDirectoryOf(process.env, process.platform),
+		pnpmHomeDir: pnpmAppDirectoryOf(process.env, process.platform),
 	});
 
 	if (!existsSync(storeDirectory)) {
@@ -109,91 +109,91 @@ async function gc(): Promise<void> {
 }
 
 function placeShim(): void {
-	const homeDirectory = homeDirectoryOf(process.platform);
-	const shadowPath = shadowPathOf(homeDirectory);
+	const appDirectory = appDirectoryOf(process.platform);
+	const npmWrapperPath = npmWrapperPathOf(appDirectory);
 
-	mkdirSync(homeDirectory, { recursive: true });
-	mkdirSync(binDirectoryOf(homeDirectory), { recursive: true });
+	mkdirSync(appDirectory, { recursive: true });
+	mkdirSync(binDirectoryOf(appDirectory), { recursive: true });
 
-	if (!existsSync(shadowPath)) {
-		throw new Error(`znpm found no shadow binary at ${shadowPath}`);
+	if (!existsSync(npmWrapperPath)) {
+		throw new Error(`znpm found no npm wrapper binary at ${npmWrapperPath}`);
 	}
 
 	if (process.platform !== "win32") {
 		return;
 	}
 
-	const shimDirectory = shimDirectoryOf(homeDirectory);
+	const shimDirectory = shimDirectoryOf(appDirectory);
 
 	mkdirSync(shimDirectory, { recursive: true });
-	copyFileSync(shadowPath, join(shimDirectory, "npm.exe"));
+	copyFileSync(npmWrapperPath, join(shimDirectory, "npm.exe"));
 	writeFileSync(join(shimDirectory, "npm.cmd"), npmCommandForwarder, "utf8");
 }
 
 function enable(): void {
-	const homeDirectory = homeDirectoryOf(process.platform);
-	const realNpmPath = realNpmPathOf(process.env, homeDirectory);
+	const appDirectory = appDirectoryOf(process.platform);
+	const npmPath = npmPathOf(process.env, appDirectory);
 
 	placeShim();
-	writeState(homeDirectory, { ...readState(homeDirectory), realNpmPath });
-	applyEnablementChanges(homeDirectory);
-	writeState(homeDirectory, { ...readState(homeDirectory), enabled: true });
+	writeState(appDirectory, { ...readState(appDirectory), npmPath });
+	applyToggleChanges(appDirectory);
+	writeState(appDirectory, { ...readState(appDirectory), enabled: true });
 }
 
 function disable(): void {
 	reverseRecordedChanges("disable");
 
-	const homeDirectory = homeDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.platform);
 
-	writeState(homeDirectory, { ...readState(homeDirectory), enabled: false });
+	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
 }
 
 function uninstall(): void {
 	reverseRecordedChanges("uninstall");
 
-	const homeDirectory = homeDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.platform);
 
-	writeState(homeDirectory, { ...readState(homeDirectory), enabled: false });
+	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
 
 	if (process.platform === "win32") {
-		scheduleWindowsHomeRemoval(homeDirectory);
+		scheduleWindowsAppDirectoryRemoval(appDirectory);
 
 		return;
 	}
 
-	rmSync(homeDirectory, { recursive: true, force: true });
+	rmSync(appDirectory, { recursive: true, force: true });
 }
 
-function applyEnablementChanges(homeDirectory: string): void {
+function applyToggleChanges(appDirectory: string): void {
 	if (process.platform === "win32") {
-		const shimDirectory = shimDirectoryOf(homeDirectory);
-		const binDirectory = binDirectoryOf(homeDirectory);
+		const shimDirectory = shimDirectoryOf(appDirectory);
+		const binDirectory = binDirectoryOf(appDirectory);
 
 		applyMachinePathElevated("insert", shimDirectory);
-		recordChange(homeDirectory, { target: "windowsMachinePath", entry: shimDirectory });
+		recordChange(appDirectory, { target: "windowsMachinePath", entry: shimDirectory });
 		applyWindowsUserPath((pathValue) => insertPathEntry(pathValue, binDirectory, ";"));
-		recordChange(homeDirectory, { target: "windowsUserPath", entry: binDirectory });
+		recordChange(appDirectory, { target: "windowsUserPath", entry: binDirectory });
 
 		return;
 	}
 
 	const npmLinkPath = "/usr/local/bin/npm";
 	const znpmLinkPath = "/usr/local/bin/znpm";
-	const znpmPath = join(binDirectoryOf(homeDirectory), "znpm");
+	const znpmPath = join(binDirectoryOf(appDirectory), "znpm");
 
-	placePosixSymlink(npmLinkPath, shadowPathOf(homeDirectory));
-	recordChange(homeDirectory, { target: "posixSymlink", path: npmLinkPath });
+	placePosixSymlink(npmLinkPath, npmWrapperPathOf(appDirectory));
+	recordChange(appDirectory, { target: "posixSymlink", path: npmLinkPath });
 	placePosixSymlink(znpmLinkPath, znpmPath);
-	recordChange(homeDirectory, { target: "posixSymlink", path: znpmLinkPath });
+	recordChange(appDirectory, { target: "posixSymlink", path: znpmLinkPath });
 }
 
 function reverseRecordedChanges(scope: "disable" | "uninstall"): void {
-	const homeDirectory = homeDirectoryOf(process.platform);
-	const reversed = changesToReverseOf(readState(homeDirectory).changes, scope);
+	const appDirectory = appDirectoryOf(process.platform);
+	const reversed = changesToReverseOf(readState(appDirectory).changes, scope);
 
 	for (const change of reversed) {
 		reverseChange(change);
-		writeState(homeDirectory, removeChanges(readState(homeDirectory), [change]));
+		writeState(appDirectory, removeChanges(readState(appDirectory), [change]));
 	}
 }
 
@@ -219,8 +219,8 @@ function reverseChange(change: PathChange): void {
 	}
 }
 
-function recordChange(homeDirectory: string, change: PathChange): void {
-	writeState(homeDirectory, upsertChange(readState(homeDirectory), change));
+function recordChange(appDirectory: string, change: PathChange): void {
+	writeState(appDirectory, upsertChange(readState(appDirectory), change));
 }
 
 function applyMachinePath(insert: string | undefined, remove: string | undefined): void {
@@ -273,14 +273,14 @@ function reinvocationOf(commandArguments: Array<string>): { filePath: string; ar
 	return { filePath, argumentList: commandArguments };
 }
 
-function scheduleWindowsHomeRemoval(homeDirectory: string): void {
+function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
 	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.ps1`);
 	const script = `$processId = ${process.pid}
-$homeDirectory = ${powershellSingleQuote(homeDirectory)}
+$appDirectory = ${powershellSingleQuote(appDirectory)}
 while (Get-Process -Id $processId -ErrorAction SilentlyContinue) {
   Start-Sleep -Milliseconds 250
 }
-Remove-Item -LiteralPath $homeDirectory -Recurse -Force
+Remove-Item -LiteralPath $appDirectory -Recurse -Force
 Remove-Item -LiteralPath ${powershellSingleQuote(scriptPath)} -Force -ErrorAction SilentlyContinue
 `;
 

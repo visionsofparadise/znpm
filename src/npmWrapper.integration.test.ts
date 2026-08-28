@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConvertSummary } from "./convert";
 
-const shadowScript = fileURLToPath(new URL("./shadow.ts", import.meta.url));
+const npmWrapperScript = fileURLToPath(new URL("./npmWrapper.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
 const sentinelSource = `"use strict";
 const npmArguments = process.argv.slice(2);
@@ -14,13 +14,13 @@ process.stdout.write(JSON.stringify({ npmArguments, internal: process.env.ZNPM_I
 process.exit(npmArguments[0] === "fail" ? 7 : 0);
 `;
 
-describe("the shadow", { timeout: 60_000 }, () => {
+describe("the npm wrapper", { timeout: 60_000 }, () => {
 	let temporaryRoot: string;
 	let localAppData: string;
 	let fakeNpmDirectory: string;
 
 	beforeEach(() => {
-		temporaryRoot = mkdtempSync(join(tmpdir(), "znpm-shadow-"));
+		temporaryRoot = mkdtempSync(join(tmpdir(), "znpm-npm-wrapper-"));
 		localAppData = join(temporaryRoot, "Local");
 		fakeNpmDirectory = join(temporaryRoot, "nodejs");
 
@@ -80,6 +80,26 @@ describe("the shadow", { timeout: 60_000 }, () => {
 		expect(result.stdout).toBe(body);
 	});
 
+	it("converts after install even when npm does not write a hidden lockfile", () => {
+		writeFileSync(
+			join(temporaryRoot, "package.json"),
+			`${JSON.stringify({ name: "host", private: true })}\n`,
+			"utf8",
+		);
+
+		const result = runShadow({ npmArguments: ["install", "left-pad"] });
+
+		expect(result.status).toBe(0);
+		expect(converterOutputLinesOf(result.stderr).some((line) => line.startsWith("znpm {"))).toBe(true);
+	});
+
+	it("does not convert after --version", () => {
+		const result = runShadow({ npmArguments: ["--version"] });
+
+		expect(result.status).toBe(0);
+		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
+	});
+
 	it("propagates a nonzero exit code", () => {
 		const result = runShadow({ npmArguments: ["fail"] });
 
@@ -135,7 +155,7 @@ describe("the shadow", { timeout: 60_000 }, () => {
 			delete env.ZNPM_DISABLE;
 		}
 
-		const result = spawnSync(process.execPath, ["--import", tsxLoader, shadowScript, ...options.npmArguments], {
+		const result = spawnSync(process.execPath, ["--import", tsxLoader, npmWrapperScript, ...options.npmArguments], {
 			cwd: temporaryRoot,
 			encoding: "utf8",
 			env,
@@ -153,7 +173,7 @@ interface Workspace {
 	localAppData: string;
 }
 
-describe("the shadow converting captured npm commands", { timeout: 180_000 }, () => {
+describe("the npm wrapper converting captured npm commands", { timeout: 180_000 }, () => {
 	const workspaces: Array<string> = [];
 
 	afterEach(() => {
@@ -273,7 +293,7 @@ describe("the shadow converting captured npm commands", { timeout: 180_000 }, ()
 	});
 
 	function openWorkspace(): Workspace {
-		const root = mkdtempSync(join(tmpdir(), "znpm-shadow-convert-"));
+		const root = mkdtempSync(join(tmpdir(), "znpm-npm-wrapper-convert-"));
 
 		workspaces.push(root);
 
@@ -337,7 +357,7 @@ function runCapturedShadow(
 		env.ZNPM_STORE_DIR = envOverrides.ZNPM_STORE_DIR;
 	}
 
-	const result = spawnSync(process.execPath, ["--import", tsxLoader, shadowScript, ...npmArguments], {
+	const result = spawnSync(process.execPath, ["--import", tsxLoader, npmWrapperScript, ...npmArguments], {
 		cwd,
 		encoding: "utf8",
 		env,

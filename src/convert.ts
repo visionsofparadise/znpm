@@ -3,11 +3,13 @@ import { join, resolve } from "node:path";
 import { createNewStoreController } from "@pnpm/store-connection-manager";
 import { getStorePath } from "@pnpm/store-path";
 import { finishWorkers } from "@pnpm/worker";
+import { batchesByDepthOf } from "./batchesByDepthOf";
 import { detachPackageDirectory } from "./detach";
 import { readHiddenLockfile, wantedPackagesOf, type Resolution, type WantedPackage } from "./hiddenLockfile";
 import { cacacheTarballPathOf } from "./npmCache";
 import { sealPackageDirectory } from "./seal";
 import { storeControllerOptionsOf } from "./storeController";
+import { isRecord } from "./utils/isRecord";
 
 export interface ConvertSummary {
 	entries: number;
@@ -19,7 +21,7 @@ export interface ConvertSummary {
 	detachedFiles: number;
 	symlinked: number;
 	selfBuilding: number;
-	alreadyLinked: number;
+	linked: number;
 	imported: number;
 	failed: number;
 	cacheMisses: number;
@@ -28,12 +30,12 @@ export interface ConvertSummary {
 
 export async function convert(
 	projectDirectory: string,
-	options: { storeDirectory?: string; pnpmHomeDirectory: string; npmCacheDirectory: string },
+	options: { storeDirectory?: string; pnpmAppDirectory: string; npmCacheDirectory: string },
 ): Promise<ConvertSummary> {
 	const storeDirectory = await getStorePath({
 		pkgRoot: projectDirectory,
 		storePath: options.storeDirectory === undefined ? undefined : resolve(options.storeDirectory),
-		pnpmHomeDir: options.pnpmHomeDirectory,
+		pnpmHomeDir: options.pnpmAppDirectory,
 	});
 	const hiddenLockfile = readHiddenLockfile(projectDirectory);
 
@@ -48,7 +50,7 @@ export async function convert(
 	const symlinked: Array<WantedPackage> = [];
 	const selfBuilding: Array<WantedPackage> = [];
 	const stale: Array<WantedPackage> = [];
-	const alreadyLinked: Array<WantedPackage> = [];
+	const linked: Array<WantedPackage> = [];
 	const toImport: Array<WantedPackage> = [];
 
 	for (const wantedPackage of wanted) {
@@ -84,8 +86,8 @@ export async function convert(
 			continue;
 		}
 
-		if (isAlreadyLinked(packageDirectory, wantedPackage.version)) {
-			alreadyLinked.push(wantedPackage);
+		if (isLinked(packageDirectory, wantedPackage.version)) {
+			linked.push(wantedPackage);
 
 			continue;
 		}
@@ -143,7 +145,7 @@ export async function convert(
 		detachedFiles,
 		symlinked: symlinked.length,
 		selfBuilding: selfBuilding.length,
-		alreadyLinked: alreadyLinked.length,
+		linked: linked.length,
 		imported,
 		failed,
 		cacheMisses,
@@ -162,7 +164,7 @@ function emptySummary(storeDirectory: string): ConvertSummary {
 		detachedFiles: 0,
 		symlinked: 0,
 		selfBuilding: 0,
-		alreadyLinked: 0,
+		linked: 0,
 		imported: 0,
 		failed: 0,
 		cacheMisses: 0,
@@ -221,7 +223,7 @@ function isStale(packageDirectory: string, wantedVersion: string | undefined): b
 	return manifestVersionOf(packageDirectory) !== wantedVersion;
 }
 
-function isAlreadyLinked(packageDirectory: string, wantedVersion: string | undefined): boolean {
+function isLinked(packageDirectory: string, wantedVersion: string | undefined): boolean {
 	const manifestPath = join(packageDirectory, "package.json");
 
 	try {
@@ -257,23 +259,6 @@ function packageEntryCountOf(hiddenLockfile: unknown): number {
 	}
 
 	return Object.keys(hiddenLockfile.packages).length;
-}
-
-function batchesByDepthOf(wantedPackages: Array<WantedPackage>): Map<number, Array<WantedPackage>> {
-	const batches = new Map<number, Array<WantedPackage>>();
-
-	for (const wantedPackage of wantedPackages) {
-		const depth = (wantedPackage.location.match(/(^|\/)node_modules(\/|$)/g) ?? []).length;
-		const batch = batches.get(depth);
-
-		if (batch === undefined) {
-			batches.set(depth, [wantedPackage]);
-		} else {
-			batch.push(wantedPackage);
-		}
-	}
-
-	return batches;
 }
 
 function fetchResolutionOf(
@@ -369,8 +354,4 @@ async function importBatch(
 	await Promise.all(Array.from({ length: workerCount }, worker));
 
 	return { imported, failed, cacheMisses };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
 }
