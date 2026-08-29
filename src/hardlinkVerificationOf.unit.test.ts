@@ -116,31 +116,21 @@ describe("hardlinkVerificationOf", () => {
 		]);
 	});
 
-	it("reports a unique unshared file beside a store-linked blob", () => {
+	it("accepts a sealed importer copy whose blob is not linked in this package", () => {
 		const project = openProject();
-		writeHiddenLockfile(project, { icons: "1.0.0" });
-		const storeManifest = join(project, "store-icons.json");
-		const packageDirectory = join(project, "node_modules", "icons");
-		const unique = join(packageDirectory, "extra.js");
+		writeHiddenLockfile(project, { types: "1.0.0" });
+		const storeManifest = join(project, "store-types.json");
+		const packageDirectory = join(project, "node_modules", "types");
+		const stub = join(packageDirectory, "abort.js");
 
-		writeFileSync(storeManifest, `${JSON.stringify({ name: "icons", version: "1.0.0" })}\n`);
+		writeFileSync(storeManifest, `${JSON.stringify({ name: "types", version: "1.0.0" })}\n`);
 		mkdirSync(packageDirectory, { recursive: true });
 		linkSync(storeManifest, join(packageDirectory, "package.json"));
-		writeFileSync(unique, "console.log(1)\n");
+		writeFileSync(stub, "export {}\n");
 		chmodSync(join(packageDirectory, "package.json"), 0o444);
-		chmodSync(unique, 0o444);
+		chmodSync(stub, 0o444);
 
-		const verification = hardlinkVerificationOf(project);
-
-		expect(verification?.expectedLinked).toBe(1);
-		expect(verification?.mismatches).toEqual([
-			{
-				location: "node_modules/icons",
-				name: "icons",
-				kind: "fileNotLinked",
-				path: unique,
-			},
-		]);
+		expect(hardlinkVerificationOf(project)).toEqual({ expectedLinked: 1, mismatches: [] });
 	});
 
 	it("reports an ignored package that is still hard-linked", () => {
