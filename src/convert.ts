@@ -89,6 +89,10 @@ export async function convert(
 		await storeController.close();
 	}
 
+	for (const linkedPackage of linked) {
+		sealPackageDirectory(join(projectDirectory, linkedPackage.location));
+	}
+
 	return {
 		entries: packageEntryCountOf(hiddenLockfile),
 		tarballs: candidatePackages.length,
