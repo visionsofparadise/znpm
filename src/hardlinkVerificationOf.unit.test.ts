@@ -1,4 +1,4 @@
-import { chmodSync, linkSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, linkSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -64,6 +64,83 @@ describe("hardlinkVerificationOf", () => {
 		chmodSync(manifest, 0o444);
 
 		expect(hardlinkVerificationOf(project)).toEqual({ expectedLinked: 1, mismatches: [] });
+	});
+
+	it("accepts a sealed copy of a store-linked blob", () => {
+		const project = openProject();
+		writeHiddenLockfile(project, { icons: "1.0.0" });
+		const storeManifest = join(project, "store-icons.json");
+		const storeDeclaration = join(project, "store-icons.d.ts");
+		const packageDirectory = join(project, "node_modules", "icons");
+
+		writeFileSync(storeManifest, `${JSON.stringify({ name: "icons", version: "1.0.0" })}\n`);
+		writeFileSync(storeDeclaration, "export {}\n");
+		mkdirSync(packageDirectory, { recursive: true });
+		linkSync(storeManifest, join(packageDirectory, "package.json"));
+		linkSync(storeDeclaration, join(packageDirectory, "Abc.d.ts"));
+		copyFileSync(storeDeclaration, join(packageDirectory, "Zoom.d.ts"));
+		chmodSync(join(packageDirectory, "package.json"), 0o444);
+		chmodSync(join(packageDirectory, "Abc.d.ts"), 0o444);
+		chmodSync(join(packageDirectory, "Zoom.d.ts"), 0o444);
+
+		expect(hardlinkVerificationOf(project)).toEqual({ expectedLinked: 1, mismatches: [] });
+	});
+
+	it("reports an unsealed copy of a store-linked blob", () => {
+		const project = openProject();
+		writeHiddenLockfile(project, { icons: "1.0.0" });
+		const storeManifest = join(project, "store-icons.json");
+		const storeDeclaration = join(project, "store-icons.d.ts");
+		const packageDirectory = join(project, "node_modules", "icons");
+		const overflow = join(packageDirectory, "Zoom.d.ts");
+
+		writeFileSync(storeManifest, `${JSON.stringify({ name: "icons", version: "1.0.0" })}\n`);
+		writeFileSync(storeDeclaration, "export {}\n");
+		mkdirSync(packageDirectory, { recursive: true });
+		linkSync(storeManifest, join(packageDirectory, "package.json"));
+		linkSync(storeDeclaration, join(packageDirectory, "Abc.d.ts"));
+		copyFileSync(storeDeclaration, overflow);
+		chmodSync(join(packageDirectory, "package.json"), 0o444);
+		chmodSync(join(packageDirectory, "Abc.d.ts"), 0o444);
+
+		const verification = hardlinkVerificationOf(project);
+
+		expect(verification?.expectedLinked).toBe(1);
+		expect(verification?.mismatches).toEqual([
+			{
+				location: "node_modules/icons",
+				name: "icons",
+				kind: "fileNotSealed",
+				path: overflow,
+			},
+		]);
+	});
+
+	it("reports a unique unshared file beside a store-linked blob", () => {
+		const project = openProject();
+		writeHiddenLockfile(project, { icons: "1.0.0" });
+		const storeManifest = join(project, "store-icons.json");
+		const packageDirectory = join(project, "node_modules", "icons");
+		const unique = join(packageDirectory, "extra.js");
+
+		writeFileSync(storeManifest, `${JSON.stringify({ name: "icons", version: "1.0.0" })}\n`);
+		mkdirSync(packageDirectory, { recursive: true });
+		linkSync(storeManifest, join(packageDirectory, "package.json"));
+		writeFileSync(unique, "console.log(1)\n");
+		chmodSync(join(packageDirectory, "package.json"), 0o444);
+		chmodSync(unique, 0o444);
+
+		const verification = hardlinkVerificationOf(project);
+
+		expect(verification?.expectedLinked).toBe(1);
+		expect(verification?.mismatches).toEqual([
+			{
+				location: "node_modules/icons",
+				name: "icons",
+				kind: "fileNotLinked",
+				path: unique,
+			},
+		]);
 	});
 
 	it("reports an ignored package that is still hard-linked", () => {
