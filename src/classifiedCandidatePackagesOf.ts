@@ -1,7 +1,8 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { type CandidatePackage } from "./hiddenLockfile";
+import { packageFilesOf } from "./packageFilesOf";
 import { isRecord } from "./utils/isRecord";
+import type { CandidatePackage } from "./hiddenLockfile";
 
 export interface ClassifiedCandidatePackages {
 	unplaced: Array<CandidatePackage>;
@@ -119,29 +120,11 @@ function isSelfBuilding(packageDirectory: string): boolean {
 }
 
 function containsNativeAddon(directory: string): boolean {
-	let entries;
-
 	try {
-		entries = readdirSync(directory, { withFileTypes: true });
+		return packageFilesOf(directory).some((filePath) => filePath.endsWith(".node"));
 	} catch {
 		return false;
 	}
-
-	for (const entry of entries) {
-		if (entry.isSymbolicLink() || entry.name === "node_modules") {
-			continue;
-		}
-
-		if (entry.isFile() && entry.name.endsWith(".node")) {
-			return true;
-		}
-
-		if (entry.isDirectory() && containsNativeAddon(join(directory, entry.name))) {
-			return true;
-		}
-	}
-
-	return false;
 }
 
 function isStale(packageDirectory: string, candidatePackageVersion: string | undefined): boolean {

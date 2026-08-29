@@ -25,9 +25,7 @@ describe("hardlinkVerificationOf", () => {
 		const verification = hardlinkVerificationOf(project);
 
 		expect(verification?.expectedLinked).toBe(1);
-		expect(verification?.mismatches).toEqual([
-			{ location: "node_modules/ms", name: "ms", kind: "notLinked" },
-		]);
+		expect(verification?.mismatches).toEqual([{ location: "node_modules/ms", name: "ms", kind: "notLinked" }]);
 	});
 
 	it("reports a hard-linked unsealed file", () => {

@@ -54,7 +54,11 @@ describe("classifiedCandidatePackagesOf", () => {
 		mkdirSync(target);
 		writeFileSync(join(target, "package.json"), `${JSON.stringify({ name: "linked-dep", version: "1.0.0" })}\n`);
 		mkdirSync(join(project, "node_modules"));
-		symlinkSync(target, join(project, "node_modules", "linked-dep"), process.platform === "win32" ? "junction" : "dir");
+		symlinkSync(
+			target,
+			join(project, "node_modules", "linked-dep"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
 
 		const candidatePackages = [candidatePackageOf("linked-dep")];
 

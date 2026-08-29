@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { classifiedCandidatePackagesOf } from "./classifiedCandidatePackagesOf";
 import { readHiddenLockfile, candidatePackagesOf, type CandidatePackage } from "./hiddenLockfile";
+import { packageFilesOf } from "./packageFilesOf";
 
-export interface HardlinkMismatch {
+interface HardlinkMismatch {
 	location: string;
 	name: string;
 	kind: "notLinked" | "fileNotLinked" | "fileNotSealed" | "ignoredStillLinked";
@@ -84,29 +85,11 @@ function fileMismatchesOf(
 	return mismatches;
 }
 
-function packageFilesOf(directory: string): Array<string> {
-	const files: Array<string> = [];
-
-	for (const entry of readdirSync(directory, { withFileTypes: true })) {
-		if (entry.isSymbolicLink() || entry.name === "node_modules") {
-			continue;
-		}
-
-		const entryPath = join(directory, entry.name);
-
-		if (entry.isDirectory()) {
-			files.push(...packageFilesOf(entryPath));
-
-			continue;
-		}
-
-		files.push(entryPath);
-	}
-
-	return files;
-}
-
-function mismatchOf(candidatePackage: CandidatePackage, kind: HardlinkMismatch["kind"], path?: string): HardlinkMismatch {
+function mismatchOf(
+	candidatePackage: CandidatePackage,
+	kind: HardlinkMismatch["kind"],
+	path?: string,
+): HardlinkMismatch {
 	return {
 		location: candidatePackage.location,
 		name: candidatePackage.name,
