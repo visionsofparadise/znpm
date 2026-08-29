@@ -2,11 +2,13 @@ import { existsSync, lstatSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNewStoreController } from "@pnpm/store-connection-manager";
 import { getStorePath } from "@pnpm/store-path";
+import { getFilePathByModeInCafs } from "@pnpm/store.cafs";
 import { calcMaxWorkers } from "@pnpm/worker";
 import { batchesByDepthOf } from "./batchesByDepthOf";
 import { classifiedCandidatePackagesOf } from "./classifiedCandidatePackagesOf";
 import { detachPackageDirectory } from "./detach";
 import { readHiddenLockfile, candidatePackagesOf, type Resolution, type CandidatePackage } from "./hiddenLockfile";
+import { importPackageDirectory } from "./importPackageDirectory";
 import { cacacheTarballPathOf } from "./npmCache";
 import { sealPackageDirectory } from "./seal";
 import { storeControllerOptionsOf } from "./storeController";
@@ -24,6 +26,7 @@ export interface ConvertSummary {
 	selfBuilding: number;
 	linked: number;
 	imported: number;
+	locked: number;
 	failed: number;
 	cacheMisses: number;
 	storeDirectory: string;
@@ -61,6 +64,7 @@ export async function convert(
 	}
 
 	let imported = 0;
+	let locked = 0;
 	let failed = 0;
 	let cacheMisses = 0;
 
@@ -77,11 +81,13 @@ export async function convert(
 
 			const outcome = await importBatch(batch, {
 				projectDirectory,
+				storeDirectory,
 				npmCacheDirectory: options.npmCacheDirectory,
 				storeController,
 			});
 
 			imported += outcome.imported;
+			locked += outcome.locked;
 			failed += outcome.failed;
 			cacheMisses += outcome.cacheMisses;
 		}
@@ -105,6 +111,7 @@ export async function convert(
 		selfBuilding: selfBuilding.length,
 		linked: linked.length,
 		imported,
+		locked,
 		failed,
 		cacheMisses,
 		storeDirectory,
@@ -124,6 +131,7 @@ function emptySummary(storeDirectory: string): ConvertSummary {
 		selfBuilding: 0,
 		linked: 0,
 		imported: 0,
+		locked: 0,
 		failed: 0,
 		cacheMisses: 0,
 		storeDirectory,
@@ -170,12 +178,14 @@ async function importBatch(
 	batch: Array<CandidatePackage>,
 	options: {
 		projectDirectory: string;
+		storeDirectory: string;
 		npmCacheDirectory: string;
 		storeController: StoreController;
 	},
-): Promise<{ imported: number; failed: number; cacheMisses: number }> {
+): Promise<{ imported: number; locked: number; failed: number; cacheMisses: number }> {
 	let cursor = 0;
 	let imported = 0;
+	let locked = 0;
 	let failed = 0;
 	let cacheMisses = 0;
 	const workerCount = Math.max(1, Math.min(4, calcMaxWorkers()));
@@ -219,14 +229,16 @@ async function importBatch(
 				}
 
 				const files = (await fetchResponse.fetching()).files;
+				const packageDirectory = join(options.projectDirectory, candidatePackage.location);
+				const outcome = await importPackageDirectory(packageDirectory, filesMapOf(files, options.storeDirectory));
 
-				await options.storeController.importPackage(join(options.projectDirectory, candidatePackage.location), {
-					filesResponse: files,
-					force: true,
-					keepModulesDir: true,
-					requiresBuild: false,
-				});
-				sealPackageDirectory(join(options.projectDirectory, candidatePackage.location));
+				if (outcome === "locked") {
+					locked++;
+
+					continue;
+				}
+
+				sealPackageDirectory(packageDirectory);
 				imported++;
 			} catch (error: unknown) {
 				failed++;
@@ -239,5 +251,34 @@ async function importBatch(
 
 	await Promise.all(Array.from({ length: workerCount }, worker));
 
-	return { imported, failed, cacheMisses };
+	return { imported, locked, failed, cacheMisses };
+}
+
+function filesMapOf(
+	files: { unprocessed?: boolean; filesIndex: Record<string, unknown> },
+	storeDirectory: string,
+): Record<string, string> {
+	const filesMap: Record<string, string> = {};
+
+	if (files.unprocessed === true) {
+		for (const [relativePath, fileInfo] of Object.entries(files.filesIndex)) {
+			if (!isRecord(fileInfo) || typeof fileInfo.integrity !== "string" || typeof fileInfo.mode !== "number") {
+				throw new Error(`znpm could not resolve store path for ${relativePath}`);
+			}
+
+			filesMap[relativePath] = getFilePathByModeInCafs(storeDirectory, fileInfo.integrity, fileInfo.mode);
+		}
+
+		return filesMap;
+	}
+
+	for (const [relativePath, storePath] of Object.entries(files.filesIndex)) {
+		if (typeof storePath !== "string") {
+			throw new Error(`znpm could not resolve store path for ${relativePath}`);
+		}
+
+		filesMap[relativePath] = storePath;
+	}
+
+	return filesMap;
 }

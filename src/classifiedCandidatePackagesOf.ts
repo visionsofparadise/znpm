@@ -1,6 +1,5 @@
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { packageFilesOf } from "./packageFilesOf";
 import { isRecord } from "./utils/isRecord";
 import type { CandidatePackage } from "./hiddenLockfile";
 
@@ -101,10 +100,6 @@ function isSelfBuilding(packageDirectory: string): boolean {
 		return true;
 	}
 
-	if (containsNativeAddon(packageDirectory)) {
-		return true;
-	}
-
 	try {
 		const manifest: unknown = JSON.parse(readFileSync(join(packageDirectory, "package.json"), "utf8"));
 		const scripts = isRecord(manifest) && isRecord(manifest.scripts) ? manifest.scripts : {};
@@ -114,14 +109,6 @@ function isSelfBuilding(packageDirectory: string): boolean {
 
 			return typeof script === "string" && script !== "";
 		});
-	} catch {
-		return false;
-	}
-}
-
-function containsNativeAddon(directory: string): boolean {
-	try {
-		return packageFilesOf(directory).some((filePath) => filePath.endsWith(".node"));
 	} catch {
 		return false;
 	}

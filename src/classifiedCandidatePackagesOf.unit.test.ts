@@ -79,12 +79,12 @@ describe("classifiedCandidatePackagesOf", () => {
 		]);
 	});
 
-	it("classifies a shipped .node file as self-building", () => {
+	it("classifies a shipped .node file without install scripts as toImport", () => {
 		const project = openProject();
 		writePackage(project, "native-addon", { version: "1.0.0" });
 		writeFileSync(join(project, "node_modules", "native-addon", "addon.node"), "");
 
-		expect(classifiedCandidatePackagesOf(project, [candidatePackageOf("native-addon")]).selfBuilding).toEqual([
+		expect(classifiedCandidatePackagesOf(project, [candidatePackageOf("native-addon")]).toImport).toEqual([
 			candidatePackageOf("native-addon"),
 		]);
 	});
