@@ -139,7 +139,9 @@ function isLinked(packageDirectory: string, candidatePackageVersion: string | un
 	const manifestPath = join(packageDirectory, "package.json");
 
 	try {
-		if (statSync(manifestPath).nlink < 2) {
+		const mode = statSync(manifestPath).mode & 0o777;
+
+		if (mode !== 0o444 && mode !== 0o555) {
 			return false;
 		}
 

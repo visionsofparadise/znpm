@@ -1,4 +1,4 @@
-import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -97,17 +97,43 @@ describe("classifiedCandidatePackagesOf", () => {
 		expect(classifiedCandidatePackagesOf(project, candidatePackages).stale).toEqual(candidatePackages);
 	});
 
-	it("classifies a hard-linked matching manifest as linked", () => {
+	it("classifies a sealed matching manifest as linked", () => {
 		const project = openProject();
 		const storeManifest = join(project, "store-package.json");
+		const manifest = join(project, "node_modules", "shared", "package.json");
 
 		writeFileSync(storeManifest, `${JSON.stringify({ name: "shared", version: "1.0.0" })}\n`);
 		mkdirSync(join(project, "node_modules", "shared"), { recursive: true });
-		linkSync(storeManifest, join(project, "node_modules", "shared", "package.json"));
+		linkSync(storeManifest, manifest);
+		chmodSync(manifest, 0o444);
 
 		const candidatePackages = [candidatePackageOf("shared")];
 
 		expect(classifiedCandidatePackagesOf(project, candidatePackages).linked).toEqual(candidatePackages);
+	});
+
+	it("classifies a sealed importer copy of the manifest as linked", () => {
+		const project = openProject();
+
+		writePackage(project, "copied", { version: "1.0.0" });
+		chmodSync(join(project, "node_modules", "copied", "package.json"), 0o444);
+
+		const candidatePackages = [candidatePackageOf("copied")];
+
+		expect(classifiedCandidatePackagesOf(project, candidatePackages).linked).toEqual(candidatePackages);
+	});
+
+	it("classifies a hard-linked unsealed manifest as toImport", () => {
+		const project = openProject();
+		const storeManifest = join(project, "store-package.json");
+
+		writeFileSync(storeManifest, `${JSON.stringify({ name: "unsealed", version: "1.0.0" })}\n`);
+		mkdirSync(join(project, "node_modules", "unsealed"), { recursive: true });
+		linkSync(storeManifest, join(project, "node_modules", "unsealed", "package.json"));
+
+		const candidatePackages = [candidatePackageOf("unsealed")];
+
+		expect(classifiedCandidatePackagesOf(project, candidatePackages).toImport).toEqual(candidatePackages);
 	});
 
 	it("classifies a placed unshared tarball as toImport", () => {

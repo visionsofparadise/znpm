@@ -28,7 +28,7 @@ describe("hardlinkVerificationOf", () => {
 		expect(verification?.mismatches).toEqual([{ location: "node_modules/ms", name: "ms", kind: "notLinked" }]);
 	});
 
-	it("reports a hard-linked unsealed file", () => {
+	it("reports a hard-linked unsealed manifest as notLinked", () => {
 		const project = openProject();
 		writeHiddenLockfile(project, { ms: "2.1.3" });
 		const store = join(project, "store-ms.json");
@@ -40,14 +40,7 @@ describe("hardlinkVerificationOf", () => {
 		const verification = hardlinkVerificationOf(project);
 
 		expect(verification?.expectedLinked).toBe(1);
-		expect(verification?.mismatches).toEqual([
-			{
-				location: "node_modules/ms",
-				name: "ms",
-				kind: "fileNotSealed",
-				path: join(project, "node_modules", "ms", "package.json"),
-			},
-		]);
+		expect(verification?.mismatches).toEqual([{ location: "node_modules/ms", name: "ms", kind: "notLinked" }]);
 	});
 
 	it("accepts a sealed hard-linked package", () => {
