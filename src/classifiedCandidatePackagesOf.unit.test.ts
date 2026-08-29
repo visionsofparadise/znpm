@@ -75,6 +75,16 @@ describe("classifiedCandidatePackagesOf", () => {
 		]);
 	});
 
+	it("classifies a shipped .node file as self-building", () => {
+		const project = openProject();
+		writePackage(project, "native-addon", { version: "1.0.0" });
+		writeFileSync(join(project, "node_modules", "native-addon", "addon.node"), "");
+
+		expect(classifiedCandidatePackagesOf(project, [candidatePackageOf("native-addon")]).selfBuilding).toEqual([
+			candidatePackageOf("native-addon"),
+		]);
+	});
+
 	it("classifies a version mismatch as stale", () => {
 		const project = openProject();
 		writePackage(project, "stale-pkg", { version: "1.0.0" });

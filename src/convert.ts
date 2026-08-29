@@ -224,8 +224,11 @@ async function importBatch(
 				});
 				sealPackageDirectory(join(options.projectDirectory, candidatePackage.location));
 				imported++;
-			} catch {
+			} catch (error: unknown) {
 				failed++;
+				console.error(
+					`znpm could not import ${candidatePackage.location}: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			}
 		}
 	};
