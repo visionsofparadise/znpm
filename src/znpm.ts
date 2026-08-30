@@ -27,6 +27,7 @@ import {
 	placePosixSymlink,
 	removeChanges,
 	removePathEntry,
+	removePathEntryIgnoringCase,
 	removePosixSymlink,
 	upsertChange,
 } from "./toggle";
@@ -34,6 +35,9 @@ import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
+
+const npmLinkPath = "/usr/local/bin/npm";
+const znpmLinkPath = "/usr/local/bin/znpm";
 
 setPnpmWorkerScriptPath();
 await runCli(main);
@@ -158,6 +162,7 @@ function uninstall(): void {
 
 	const appDirectory = appDirectoryOf(process.platform);
 
+	removeZnpmExposure(appDirectory);
 	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
 
 	if (process.platform === "win32") {
@@ -172,24 +177,27 @@ function uninstall(): void {
 function applyToggleChanges(appDirectory: string): void {
 	if (process.platform === "win32") {
 		const shimDirectory = shimDirectoryOf(appDirectory);
-		const binDirectory = binDirectoryOf(appDirectory);
 
 		applyMachinePathElevated("insert", shimDirectory);
 		recordChange(appDirectory, { target: "windowsMachinePath", entry: shimDirectory });
-		applyWindowsUserPath((pathValue) => insertPathEntry(pathValue, binDirectory, ";"));
-		recordChange(appDirectory, { target: "windowsUserPath", entry: binDirectory });
 
 		return;
 	}
 
-	const npmLinkPath = "/usr/local/bin/npm";
-	const znpmLinkPath = "/usr/local/bin/znpm";
-	const znpmPath = join(binDirectoryOf(appDirectory), "znpm");
-
 	placePosixSymlink(npmLinkPath, npmWrapperPathOf(appDirectory));
 	recordChange(appDirectory, { target: "posixSymlink", path: npmLinkPath });
-	placePosixSymlink(znpmLinkPath, znpmPath);
-	recordChange(appDirectory, { target: "posixSymlink", path: znpmLinkPath });
+}
+
+function removeZnpmExposure(appDirectory: string): void {
+	if (process.platform === "win32") {
+		const binDirectory = binDirectoryOf(appDirectory);
+
+		applyWindowsUserPath((pathValue) => removePathEntryIgnoringCase(pathValue, binDirectory, ";"));
+
+		return;
+	}
+
+	removePosixSymlink(znpmLinkPath);
 }
 
 function reverseRecordedChanges(scope: "disable" | "uninstall"): void {

@@ -17,9 +17,19 @@ export function insertPathEntry(pathValue: string, entry: string, separator: str
 }
 
 export function removePathEntry(pathValue: string, entry: string, separator: string): string {
+	return pathValueWithout(pathValue, separator, (existing) => existing === entry);
+}
+
+export function removePathEntryIgnoringCase(pathValue: string, entry: string, separator: string): string {
+	const lowercased = entry.toLowerCase();
+
+	return pathValueWithout(pathValue, separator, (existing) => existing.toLowerCase() === lowercased);
+}
+
+function pathValueWithout(pathValue: string, separator: string, matches: (entry: string) => boolean): string {
 	const entries = pathValue === "" ? [] : pathValue.split(separator);
 
-	return entries.filter((existing) => existing !== entry).join(separator);
+	return entries.filter((existing) => !matches(existing)).join(separator);
 }
 
 function npmFacingChangesOf(changes: Array<PathChange>): Array<PathChange> {

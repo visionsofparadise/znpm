@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { type PathChange, type State } from "./appData";
-import { changesToReverseOf, insertPathEntry, removePathEntry, upsertChange } from "./toggle";
+import {
+	changesToReverseOf,
+	insertPathEntry,
+	removePathEntry,
+	removePathEntryIgnoringCase,
+	upsertChange,
+} from "./toggle";
 
 describe("insertPathEntry", () => {
 	it("prepends the entry", () => {
@@ -37,6 +43,38 @@ describe("removePathEntry", () => {
 
 	it("leaves a value that does not contain the entry", () => {
 		expect(removePathEntry("a;b", "c", ";")).toBe("a;b");
+	});
+});
+
+describe("removePathEntryIgnoringCase", () => {
+	it("removes an entry recorded in another casing", () => {
+		expect(
+			removePathEntryIgnoringCase(
+				"C:\\Users\\Someone\\AppData\\Local\\znpm\\bin;C:\\Windows",
+				"c:\\users\\someone\\appdata\\local\\znpm\\bin",
+				";",
+			),
+		).toBe("C:\\Windows");
+	});
+
+	it("removes an entry spelled exactly", () => {
+		expect(removePathEntryIgnoringCase("C:\\znpm\\bin;C:\\Windows", "C:\\znpm\\bin", ";")).toBe("C:\\Windows");
+	});
+
+	it("removes every occurrence of the entry", () => {
+		expect(removePathEntryIgnoringCase("C:\\znpm\\bin;C:\\Windows;c:\\ZNPM\\BIN", "C:\\znpm\\bin", ";")).toBe(
+			"C:\\Windows",
+		);
+	});
+
+	it("leaves a value that does not contain the entry", () => {
+		expect(removePathEntryIgnoringCase("C:\\Windows;C:\\znpm\\shim", "C:\\znpm\\bin", ";")).toBe(
+			"C:\\Windows;C:\\znpm\\shim",
+		);
+	});
+
+	it("leaves an empty value empty", () => {
+		expect(removePathEntryIgnoringCase("", "C:\\znpm\\bin", ";")).toBe("");
 	});
 });
 
