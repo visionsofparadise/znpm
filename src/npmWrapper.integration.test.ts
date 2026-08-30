@@ -1,13 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConvertSummary } from "./convert";
-
-const znpmVersion: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 const npmWrapperScript = fileURLToPath(new URL("./npmWrapper.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
@@ -101,7 +98,7 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 
 		expect(result.status).toBe(0);
 		expect(converterSummariesOf(result.stderr)).toEqual([]);
-		expect(result.stderr).toContain(`znpm ${znpmVersion}`);
+		expect(result.stdout.endsWith(" (znpm)\n")).toBe(true);
 	});
 
 	it("propagates a nonzero exit code", () => {
@@ -110,15 +107,12 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		expect(result.status).toBe(7);
 	});
 
-	it("writes only npm's output to stdout", () => {
+	it("appends (znpm) to npm's version on stdout", () => {
 		const result = runShadow({ npmArguments: ["--version"] });
+		const body = JSON.stringify({ npmArguments: ["--version"], internal: "1" });
 
-		expect(result.stdout.endsWith("\n")).toBe(true);
-		expect(result.stdout.slice(0, -1).includes("\n")).toBe(false);
-		expect(JSON.parse(result.stdout)).toEqual({
-			npmArguments: ["--version"],
-			internal: "1",
-		});
+		expect(result.stdout).toBe(`${body} (znpm)\n`);
+		expect(result.stderr.includes("znpm {")).toBe(false);
 	});
 
 	it("passes npm install -g through with no conversion attempt", () => {

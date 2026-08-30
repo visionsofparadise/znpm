@@ -64,7 +64,7 @@ function main(): void | Promise<void> {
 		}
 
 		case "enable": {
-			runWithStatus("enabled...", "enabled", enable);
+			runWithStatus("enabling...", "enabled", enable);
 
 			return;
 		}
@@ -131,20 +131,27 @@ function placeShim(): void {
 	}
 
 	if (process.platform !== "win32") {
+		log(`using ${npmWrapperPath}`);
+
 		return;
 	}
 
 	const shimDirectory = shimDirectoryOf(appDirectory);
+	const shimNpm = join(shimDirectory, "npm.exe");
+	const shimCmd = join(shimDirectory, "npm.cmd");
 
 	mkdirSync(shimDirectory, { recursive: true });
-	copyFileSync(npmWrapperPath, join(shimDirectory, "npm.exe"));
-	writeFileSync(join(shimDirectory, "npm.cmd"), npmCommandForwarder, "utf8");
+	log(`writing ${shimNpm}`);
+	copyFileSync(npmWrapperPath, shimNpm);
+	log(`writing ${shimCmd}`);
+	writeFileSync(shimCmd, npmCommandForwarder, "utf8");
 }
 
 function enable(): void {
 	const appDirectory = appDirectoryOf(process.platform);
 	const npmPath = npmPathOf(process.env, appDirectory);
 
+	log(`using real npm at ${npmPath}`);
 	placeShim();
 	writeState(appDirectory, { ...readState(appDirectory), npmPath });
 	applyToggleChanges(appDirectory);
@@ -161,6 +168,9 @@ function disable(): void {
 
 function uninstall(): void {
 	const appDirectory = appDirectoryOf(process.platform);
+
+	log("checking for running processes");
+
 	const running = runningAppDirectoryProcessesOf(appDirectory);
 
 	if (running.length > 0) {
@@ -173,11 +183,13 @@ function uninstall(): void {
 	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
 
 	if (process.platform === "win32") {
+		log(`removing ${appDirectory}`);
 		scheduleWindowsAppDirectoryRemoval(appDirectory);
 
 		return;
 	}
 
+	log(`removing ${appDirectory}`);
 	rmSync(appDirectory, { recursive: true, force: true });
 }
 
@@ -185,13 +197,17 @@ function applyToggleChanges(appDirectory: string): void {
 	if (process.platform === "win32") {
 		const shimDirectory = shimDirectoryOf(appDirectory);
 
+		log(`prepending ${shimDirectory} to the machine PATH`);
 		applyMachinePathElevated("insert", shimDirectory);
 		recordChange(appDirectory, { target: "windowsMachinePath", entry: shimDirectory });
 
 		return;
 	}
 
-	placePosixSymlink(npmLinkPath, npmWrapperPathOf(appDirectory));
+	const npmWrapperPath = npmWrapperPathOf(appDirectory);
+
+	log(`linking ${npmLinkPath} -> ${npmWrapperPath}`);
+	placePosixSymlink(npmLinkPath, npmWrapperPath);
 	recordChange(appDirectory, { target: "posixSymlink", path: npmLinkPath });
 }
 
@@ -199,12 +215,16 @@ function removeZnpmExposure(appDirectory: string): void {
 	if (process.platform === "win32") {
 		const binDirectory = binDirectoryOf(appDirectory);
 
+		log(`removing ${binDirectory} from the user PATH`);
 		applyWindowsUserPath((pathValue) => removePathEntryIgnoringCase(pathValue, binDirectory, ";"));
 
 		return;
 	}
 
-	removePosixSymlinkPointingAt(znpmLinkPath, join(binDirectoryOf(appDirectory), "znpm"));
+	const znpmPath = join(binDirectoryOf(appDirectory), "znpm");
+
+	log(`removing ${znpmLinkPath}`);
+	removePosixSymlinkPointingAt(znpmLinkPath, znpmPath);
 }
 
 function reverseRecordedChanges(scope: "disable" | "uninstall"): void {
@@ -220,18 +240,21 @@ function reverseRecordedChanges(scope: "disable" | "uninstall"): void {
 function reverseChange(change: PathChange): void {
 	switch (change.target) {
 		case "windowsMachinePath": {
+			log(`removing ${change.entry} from the machine PATH`);
 			applyMachinePathElevated("remove", change.entry);
 
 			return;
 		}
 
 		case "windowsUserPath": {
+			log(`removing ${change.entry} from the user PATH`);
 			applyWindowsUserPath((pathValue) => removePathEntry(pathValue, change.entry, ";"));
 
 			return;
 		}
 
 		case "posixSymlink": {
+			log(`removing ${change.path}`);
 			removePosixSymlink(change.path);
 
 			return;
@@ -317,9 +340,13 @@ function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
 }
 
 function runWithStatus(inProgress: string, complete: string, work: () => void): void {
-	console.error(inProgress);
+	log(inProgress);
 	work();
-	console.error(complete);
+	log(complete);
+}
+
+function log(message: string): void {
+	console.error(message);
 }
 
 function powershellSingleQuote(value: string): string {

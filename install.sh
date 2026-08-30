@@ -1,7 +1,11 @@
 #!/bin/sh
 set -eu
 
-echo "installing..."
+step() {
+	echo "$1" >&2
+}
+
+step "installing..."
 
 base_url="${ZNPM_BASE_URL:-https://github.com/visionsofparadise/znpm/releases/latest/download}"
 
@@ -13,7 +17,7 @@ case "$kernel" in
 	Darwin) os="darwin" ;;
 	MINGW* | MSYS* | CYGWIN* | Windows_NT) os="windows" ;;
 	*)
-		echo "znpm has no build for $kernel." >&2
+		step "znpm has no build for $kernel."
 		exit 1
 		;;
 esac
@@ -22,7 +26,7 @@ case "$machine" in
 	x86_64 | amd64) arch="x64" ;;
 	aarch64 | arm64) arch="arm64" ;;
 	*)
-		echo "znpm has no build for $os $machine." >&2
+		step "znpm has no build for $os $machine."
 		exit 1
 		;;
 esac
@@ -36,7 +40,7 @@ if [ "$os" = "windows" ]; then
 	elif [ -n "${HOME:-}" ]; then
 		windows_home="$HOME/AppData/Local"
 	else
-		echo "znpm requires LOCALAPPDATA or HOME." >&2
+		step "znpm requires LOCALAPPDATA or HOME."
 		exit 1
 	fi
 	if command -v cygpath >/dev/null 2>&1; then
@@ -47,7 +51,7 @@ if [ "$os" = "windows" ]; then
 else
 	exe=""
 	if [ -z "${HOME:-}" ]; then
-		echo "znpm requires HOME." >&2
+		step "znpm requires HOME."
 		exit 1
 	fi
 	app_directory="$HOME/.local/share/znpm"
@@ -59,6 +63,8 @@ znpm_asset="znpm-$target$exe"
 npm_wrapper_asset="npm-wrapper-$target$exe"
 znpm_path="$bin_directory/znpm$exe"
 npm_wrapper_path="$app_directory/npm-wrapper$exe"
+
+step "installing $target into $app_directory"
 
 windows_path() {
 	if command -v cygpath >/dev/null 2>&1; then
@@ -74,7 +80,7 @@ fetch() {
 	elif command -v wget >/dev/null 2>&1; then
 		wget -qO- "$1"
 	else
-		echo "znpm requires curl or wget." >&2
+		step "znpm requires curl or wget."
 		exit 1
 	fi
 }
@@ -86,7 +92,7 @@ verify() {
 		grep -E "[[:space:]][*]?($znpm_asset|$npm_wrapper_asset)\$" SHA256SUMS >SHA256SUMS.selected
 		shasum -a 256 -c --status SHA256SUMS.selected
 	else
-		echo "znpm requires sha256sum or shasum." >&2
+		step "znpm requires sha256sum or shasum."
 		exit 1
 	fi
 }
@@ -142,44 +148,58 @@ EOF
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 
+step "downloading SHA256SUMS"
 fetch "$base_url/SHA256SUMS" >"$temporary_directory/SHA256SUMS"
+step "downloading $znpm_asset"
 fetch "$base_url/$znpm_asset" >"$temporary_directory/$znpm_asset"
+step "downloading $npm_wrapper_asset"
 fetch "$base_url/$npm_wrapper_asset" >"$temporary_directory/$npm_wrapper_asset"
 
+step "verifying checksums"
 (cd "$temporary_directory" && verify)
 
 mkdir -p "$bin_directory"
+step "placing $npm_wrapper_path"
 mv "$temporary_directory/$npm_wrapper_asset" "$npm_wrapper_path"
 chmod +x "$npm_wrapper_path"
+step "placing $znpm_path"
 mv "$temporary_directory/$znpm_asset" "$znpm_path"
 chmod +x "$znpm_path"
 
 if [ "$os" = "windows" ]; then
+	step "prepending $bin_directory to the user PATH"
 	add_windows_user_path "$bin_directory"
 else
 	link_path="/usr/local/bin/znpm"
 	if [ -L "$link_path" ]; then
 		privileged rm -f "$link_path"
 	elif [ -e "$link_path" ]; then
-		echo "znpm found $link_path that it did not create." >&2
+		step "znpm found $link_path that it did not create."
 		exit 1
 	fi
+	step "linking $link_path -> $znpm_path"
 	privileged mkdir -p /usr/local/bin
 	privileged ln -s "$znpm_path" "$link_path"
 fi
 
-echo "installed"
+step "installed"
 
 "$znpm_path" enable
 
 if [ "$os" = "windows" ]; then
 	if command -v cygpath >/dev/null 2>&1; then
-		export PATH="$(cygpath -u "$shim_directory"):$(cygpath -u "$bin_directory"):$PATH"
+		path_prefix="$(cygpath -u "$shim_directory"):$(cygpath -u "$bin_directory")"
 	else
-		export PATH="$shim_directory:$bin_directory:$PATH"
+		path_prefix="$shim_directory:$bin_directory"
 	fi
 else
-	export PATH="/usr/local/bin:$PATH"
+	path_prefix="/usr/local/bin"
 fi
+
+export PATH="$path_prefix:$PATH"
+hash -r 2>/dev/null || true
+
+printf 'export PATH="%s:$PATH"\n' "$path_prefix"
+printf '%s\n' 'hash -r 2>/dev/null || true'
 
 

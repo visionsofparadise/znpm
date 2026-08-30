@@ -3,6 +3,12 @@ param([string]$BaseUrl = "https://github.com/visionsofparadise/znpm/releases/lat
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
+function Write-Step {
+	param([string]$Message)
+
+	[Console]::Error.WriteLine($Message)
+}
+
 function Get-InstallTarget {
 	$architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 
@@ -113,7 +119,7 @@ function Install-PosixZnpmLink {
 	& sudo ln -s $ZnpmPath $linkPath
 }
 
-Write-Output "installing..."
+Write-Step "installing..."
 
 $target = Get-InstallTarget
 $windows = $target.StartsWith("windows-")
@@ -143,11 +149,14 @@ $znpmPath = Join-Path $binDirectory "znpm$exe"
 $npmWrapperPath = Join-Path $appDirectory "npm-wrapper$exe"
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("znpm-install-" + [Guid]::NewGuid().ToString("n"))
 
+Write-Step "installing $target into $appDirectory"
+
 New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
 
 try {
 	$checksumsPath = Join-Path $temporaryDirectory "SHA256SUMS"
 
+	Write-Step "downloading SHA256SUMS"
 	Invoke-WebRequest -Uri "$BaseUrl/SHA256SUMS" -OutFile $checksumsPath -UseBasicParsing
 
 	$checksums = Get-Content -LiteralPath $checksumsPath -Raw
@@ -155,8 +164,10 @@ try {
 	foreach ($asset in @($znpmAsset, $npmWrapperAsset)) {
 		$assetPath = Join-Path $temporaryDirectory $asset
 
+		Write-Step "downloading $asset"
 		Invoke-WebRequest -Uri "$BaseUrl/$asset" -OutFile $assetPath -UseBasicParsing
 
+		Write-Step "verifying $asset"
 		$expected = Get-ExpectedChecksum -Checksums $checksums -Asset $asset
 		$actual = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash
 
@@ -166,7 +177,9 @@ try {
 	}
 
 	New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
+	Write-Step "placing $npmWrapperPath"
 	Move-Item -LiteralPath (Join-Path $temporaryDirectory $npmWrapperAsset) -Destination $npmWrapperPath -Force
+	Write-Step "placing $znpmPath"
 	Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination $znpmPath -Force
 
 	if (-not $windows) {
@@ -178,12 +191,14 @@ try {
 }
 
 if ($windows) {
+	Write-Step "prepending $binDirectory to the user PATH"
 	Add-UserPathEntry -Entry $binDirectory
 } else {
+	Write-Step "linking /usr/local/bin/znpm -> $znpmPath"
 	Install-PosixZnpmLink -ZnpmPath $znpmPath
 }
 
-Write-Output "installed"
+Write-Step "installed"
 
 & $znpmPath enable
 
@@ -192,7 +207,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($windows) {
+	Write-Step "prepending $shimDirectory and $binDirectory to this process PATH"
 	$env:Path = "$shimDirectory;$binDirectory;$env:Path"
+
+	if (Test-Path Alias:npm) {
+		Remove-Item Alias:npm -Force
+	}
 } else {
+	Write-Step "prepending /usr/local/bin to this process PATH"
 	$env:PATH = "/usr/local/bin:$env:PATH"
 }

@@ -7,13 +7,20 @@
 Bash (including Git Bash):
 
 ```sh
-curl -fsSL https://github.com/visionsofparadise/znpm/releases/latest/download/install.sh | sh
+eval "$(curl -fsSL https://github.com/visionsofparadise/znpm/releases/latest/download/install.sh | sh)"
 ```
 
 PowerShell:
 
 ```powershell
 irm https://github.com/visionsofparadise/znpm/releases/latest/download/install.ps1 | iex
+```
+
+Verify it is enabled:
+
+```sh
+npm -v
+# X.Y.Z (znpm)
 ```
 
 Then use npm as you always have:

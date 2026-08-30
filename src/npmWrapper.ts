@@ -1,12 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { finishWorkers } from "@pnpm/worker";
-import { version as znpmVersion } from "../package.json" with { type: "json" };
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
 import { isNpmVersionQuery } from "./isNpmVersionQuery";
 import { isTreeMutatingNpmCommand } from "./isTreeMutatingNpmCommand";
 import { resolveNpm, type Npm } from "./npm";
 import { npmCacheDirectoryOf } from "./npmCache";
+import { npmVersionLineOf } from "./npmVersionLineOf";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
 import { candidateTreeDirectoriesOf } from "./targetTrees";
@@ -38,13 +38,13 @@ async function main(): Promise<void> {
 	}
 
 	if (!isTreeMutatingNpmCommand(npmArguments)) {
-		const status = spawnNpm(npm, npmArguments, { ...process.env, ZNPM_INTERNAL: "1" });
+		const env = { ...process.env, ZNPM_INTERNAL: "1" };
 
 		if (isNpmVersionQuery(npmArguments)) {
-			console.error(`znpm ${znpmVersion}`);
+			process.exit(spawnNpmVersion(npm, npmArguments, env));
 		}
 
-		process.exit(status);
+		process.exit(spawnNpm(npm, npmArguments, env));
 	}
 
 	await convertAfterNpm(npm, npmArguments);
@@ -99,4 +99,23 @@ function spawnNpm(npm: Npm, npmArguments: Array<string>, env: NodeJS.ProcessEnv)
 	}
 
 	return result.status ?? 1;
+}
+
+function spawnNpmVersion(npm: Npm, npmArguments: Array<string>, env: NodeJS.ProcessEnv): number {
+	const result = spawnSync(npm.command, [...npm.argsPrefix, ...npmArguments], {
+		encoding: "utf8",
+		stdio: ["inherit", "pipe", "inherit"],
+		env,
+	});
+
+	if (result.error !== undefined) {
+		console.error(result.error.message);
+		process.exit(1);
+	}
+
+	const status = result.status ?? 1;
+
+	process.stdout.write(status === 0 ? npmVersionLineOf(result.stdout) : result.stdout);
+
+	return status;
 }
