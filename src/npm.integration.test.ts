@@ -162,10 +162,16 @@ describe("resolveNpm on POSIX", () => {
 		expect(resolveNpm(env, appDirectory).command).toBe(join(npmDirectory, "npm"));
 	});
 
-	it("skips a candidate npm path whose canonical path is the npm wrapper binary", () => {
+	it("skips a candidate npm path whose canonical path is the npm wrapper binary", (context) => {
 		const linkedDirectory = join(temporaryRoot, "linked");
 
-		symlinkSync(appDirectory, linkedDirectory, "junction");
+		mkdirSync(linkedDirectory, { recursive: true });
+
+		try {
+			symlinkSync(npmWrapperPathOf(appDirectory), join(linkedDirectory, "npm"), "file");
+		} catch {
+			context.skip("this device refuses file symlinks");
+		}
 
 		const env = { PATH: pathOf([linkedDirectory, npmDirectory]) };
 

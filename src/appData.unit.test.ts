@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join, sep } from "node:path";
+import { basename, join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { appDirectoryOf, binDirectoryOf, npmWrapperPathOf, shimDirectoryOf } from "./appData";
 
@@ -41,5 +41,11 @@ describe("the app directory layout", () => {
 		}
 
 		expect(new Set(locations).size).toBe(locations.length);
+	});
+
+	it("names the npm wrapper binary apart from real npm", () => {
+		expect(basename(npmWrapperPathOf("znpm-app"))).toBe(
+			process.platform === "win32" ? "npm-wrapper.exe" : "npm-wrapper",
+		);
 	});
 });

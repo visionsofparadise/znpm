@@ -6,7 +6,19 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL(".", import.meta.url));
-const npmWrapperBinary = join(repositoryRoot, "dist", process.platform === "win32" ? "npm.exe" : "npm");
+const platformNames = { win32: "windows", linux: "linux", darwin: "darwin" };
+const platformName = platformNames[process.platform];
+
+if (platformName === undefined) {
+	console.error(`no npm wrapper binary is built for ${process.platform}`);
+	process.exit(1);
+}
+
+const npmWrapperBinary = join(
+	repositoryRoot,
+	"dist",
+	`npm-wrapper-${platformName}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`,
+);
 
 if (!existsSync(npmWrapperBinary)) {
 	console.error(`missing compiled npm wrapper at ${npmWrapperBinary}`);

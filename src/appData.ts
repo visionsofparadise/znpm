@@ -31,7 +31,7 @@ export function shimDirectoryOf(appDirectory: string): string {
 }
 
 export function npmWrapperPathOf(appDirectory: string): string {
-	return join(appDirectory, process.platform === "win32" ? "npm.exe" : "npm");
+	return join(appDirectory, process.platform === "win32" ? "npm-wrapper.exe" : "npm-wrapper");
 }
 
 export function readState(appDirectory: string): State {

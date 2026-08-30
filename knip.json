@@ -4,6 +4,7 @@
 	"project": ["src/**/*.{ts,tsx}"],
 	"ignore": [],
 	"ignoreDependencies": [
+		"bun",
 		"prettier",
 		"@commitlint/cli",
 		"markdownlint-cli2",
