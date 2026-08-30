@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { finishWorkers } from "@pnpm/worker";
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
+import { isNpmVersionQuery } from "./isNpmVersionQuery";
 import { isTreeMutatingNpmCommand } from "./isTreeMutatingNpmCommand";
 import { resolveNpm, type Npm } from "./npm";
 import { npmCacheDirectoryOf } from "./npmCache";
@@ -11,6 +13,8 @@ import { candidateTreeDirectoriesOf } from "./targetTrees";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
+
+const znpmVersion: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 setPnpmWorkerScriptPath();
 await runCli(main);
@@ -36,7 +40,13 @@ async function main(): Promise<void> {
 	}
 
 	if (!isTreeMutatingNpmCommand(npmArguments)) {
-		exitWithNpm(npm, npmArguments, { ...process.env, ZNPM_INTERNAL: "1" });
+		const status = spawnNpm(npm, npmArguments, { ...process.env, ZNPM_INTERNAL: "1" });
+
+		if (isNpmVersionQuery(npmArguments)) {
+			console.error(`znpm ${znpmVersion}`);
+		}
+
+		process.exit(status);
 	}
 
 	await convertAfterNpm(npm, npmArguments);

@@ -113,6 +113,8 @@ function Install-PosixZnpmLink {
 	& sudo ln -s $ZnpmPath $linkPath
 }
 
+Write-Output "installing..."
+
 $target = Get-InstallTarget
 $windows = $target.StartsWith("windows-")
 $exe = if ($windows) { ".exe" } else { "" }
@@ -181,6 +183,8 @@ if ($windows) {
 	Install-PosixZnpmLink -ZnpmPath $znpmPath
 }
 
+Write-Output "installed"
+
 & $znpmPath enable
 
 if ($LASTEXITCODE -ne 0) {
@@ -192,5 +196,3 @@ if ($windows) {
 } else {
 	$env:PATH = "/usr/local/bin:$env:PATH"
 }
-
-Write-Output "znpm installed and enabled."

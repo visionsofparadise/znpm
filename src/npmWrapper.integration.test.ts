@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConvertSummary } from "./convert";
+
+const znpmVersion: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 const npmWrapperScript = fileURLToPath(new URL("./npmWrapper.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
@@ -97,7 +100,8 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		const result = runShadow({ npmArguments: ["--version"] });
 
 		expect(result.status).toBe(0);
-		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
+		expect(converterSummariesOf(result.stderr)).toEqual([]);
+		expect(result.stderr).toContain(`znpm ${znpmVersion}`);
 	});
 
 	it("propagates a nonzero exit code", () => {

@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+echo "installing..."
+
 base_url="${ZNPM_BASE_URL:-https://github.com/visionsofparadise/znpm/releases/latest/download}"
 
 kernel="$(uname -s)"
@@ -166,6 +168,8 @@ else
 	privileged ln -s "$znpm_path" "$link_path"
 fi
 
+echo "installed"
+
 "$znpm_path" enable
 
 if [ "$os" = "windows" ]; then
@@ -178,4 +182,4 @@ else
 	export PATH="/usr/local/bin:$PATH"
 fi
 
-echo "znpm installed and enabled."
+

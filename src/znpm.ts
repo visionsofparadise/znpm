@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -64,19 +64,19 @@ function main(): void | Promise<void> {
 		}
 
 		case "enable": {
-			enable();
+			runWithStatus("enabled...", "enabled", enable);
 
 			return;
 		}
 
 		case "disable": {
-			disable();
+			runWithStatus("disabling...", "disabled", disable);
 
 			return;
 		}
 
 		case "uninstall": {
-			uninstall();
+			runWithStatus("uninstalling...", "uninstalled", uninstall);
 
 			return;
 		}
@@ -307,18 +307,19 @@ function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
 
 	writeFileSync(scriptPath, script, "utf8");
 
-	const result = spawnSync("cmd.exe", ["/d", "/c", `start "" /min "${scriptPath.replaceAll('"', "")}"`], {
-		windowsHide: true,
+	const child = spawn("cmd.exe", ["/d", "/c", `start "" /min "${scriptPath.replaceAll('"', "")}"`], {
+		detached: true,
 		stdio: "ignore",
+		windowsHide: true,
 	});
 
-	if (result.error !== undefined) {
-		throw result.error;
-	}
+	child.unref();
+}
 
-	if (result.status !== 0) {
-		throw new Error("znpm could not schedule app directory removal");
-	}
+function runWithStatus(inProgress: string, complete: string, work: () => void): void {
+	console.error(inProgress);
+	work();
+	console.error(complete);
 }
 
 function powershellSingleQuote(value: string): string {

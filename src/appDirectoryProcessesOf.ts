@@ -77,7 +77,7 @@ export function uninstallBusyMessageOf(processes: Array<ProcessExecutable>): str
 
 function listedProcessExecutablesOf(appDirectory: string): Array<ProcessExecutable> {
 	if (process.platform === "win32") {
-		return listedWindowsProcessExecutables();
+		return listedWindowsProcessExecutables(appDirectory);
 	}
 
 	if (process.platform === "linux") {
@@ -87,9 +87,11 @@ function listedProcessExecutablesOf(appDirectory: string): Array<ProcessExecutab
 	return [...listedLsofProcessExecutables(appDirectory), ...listedPsProcessExecutables()];
 }
 
-function listedWindowsProcessExecutables(): Array<ProcessExecutable> {
+function listedWindowsProcessExecutables(appDirectory: string): Array<ProcessExecutable> {
+	const like = `${appDirectory.replaceAll("'", "''")}\\%`;
 	const stdout = runPowerShell(
-		`Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path } | ForEach-Object { '{0} {1}' -f $_.Id, $_.Path }`,
+		`Get-CimInstance Win32_Process -Filter "ExecutablePath LIKE '${like}'" | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.ExecutablePath }`,
+		15_000,
 	);
 
 	return processExecutablesFromPidPrefixedLines(stdout);
