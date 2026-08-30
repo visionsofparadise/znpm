@@ -19,7 +19,8 @@ irm https://github.com/visionsofparadise/znpm/releases/latest/download/install.p
 Then use npm as you always have:
 
 ```sh
-npm install
+npm install # node_modules files are deduplicated across the drive
+npm run ... # commands unrelated to packages are unaffected
 ```
 
 ## Reclaiming disk
