@@ -88,9 +88,10 @@ function listedProcessExecutablesOf(appDirectory: string): Array<ProcessExecutab
 }
 
 function listedWindowsProcessExecutables(appDirectory: string): Array<ProcessExecutable> {
-	const like = `${appDirectory.replaceAll("'", "''")}\\%`;
+	const prefix = appDirectory.replaceAll("'", "''");
 	const stdout = runPowerShell(
-		`Get-CimInstance Win32_Process -Filter "ExecutablePath LIKE '${like}'" | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.ExecutablePath }`,
+		`$prefix = '${prefix}'
+Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.ExecutablePath }`,
 		15_000,
 	);
 

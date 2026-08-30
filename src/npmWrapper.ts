@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { finishWorkers } from "@pnpm/worker";
+import { version as znpmVersion } from "../package.json" with { type: "json" };
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
 import { isNpmVersionQuery } from "./isNpmVersionQuery";
@@ -13,8 +13,6 @@ import { candidateTreeDirectoriesOf } from "./targetTrees";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
-
-const znpmVersion: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 setPnpmWorkerScriptPath();
 await runCli(main);
