@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { version as znpmVersion } from "../package.json" with { type: "json" };
 import { type ConvertSummary } from "./convert";
 
 const npmWrapperScript = fileURLToPath(new URL("./npmWrapper.ts", import.meta.url));
@@ -98,7 +99,7 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 
 		expect(result.status).toBe(0);
 		expect(converterSummariesOf(result.stderr)).toEqual([]);
-		expect(result.stdout.endsWith(" (znpm)\n")).toBe(true);
+		expect(result.stdout.endsWith(` (znpm ${znpmVersion})\n`)).toBe(true);
 	});
 
 	it("propagates a nonzero exit code", () => {
@@ -107,11 +108,11 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		expect(result.status).toBe(7);
 	});
 
-	it("appends (znpm) to npm's version on stdout", () => {
+	it("appends (znpm <version>) to npm's version on stdout", () => {
 		const result = runShadow({ npmArguments: ["--version"] });
 		const body = JSON.stringify({ npmArguments: ["--version"], internal: "1" });
 
-		expect(result.stdout).toBe(`${body} (znpm)\n`);
+		expect(result.stdout).toBe(`${body} (znpm ${znpmVersion})\n`);
 		expect(result.stderr.includes("znpm {")).toBe(false);
 	});
 

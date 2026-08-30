@@ -20,7 +20,7 @@ Verify it is enabled:
 
 ```sh
 npm -v
-# X.Y.Z (znpm)
+# X.Y.Z (znpm A.B.C)
 ```
 
 Then use npm as you always have:

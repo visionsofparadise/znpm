@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { finishWorkers } from "@pnpm/worker";
+import { version as znpmVersion } from "../package.json" with { type: "json" };
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
 import { isNpmVersionQuery } from "./isNpmVersionQuery";
@@ -115,7 +116,7 @@ function spawnNpmVersion(npm: Npm, npmArguments: Array<string>, env: NodeJS.Proc
 
 	const status = result.status ?? 1;
 
-	process.stdout.write(status === 0 ? npmVersionLineOf(result.stdout) : result.stdout);
+	process.stdout.write(status === 0 ? npmVersionLineOf(result.stdout, znpmVersion) : result.stdout);
 
 	return status;
 }
