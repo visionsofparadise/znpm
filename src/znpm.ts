@@ -317,24 +317,30 @@ function reinvocationOf(commandArguments: Array<string>): { filePath: string; ar
 }
 
 function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
-	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.cmd`);
-	const quotedAppDirectory = `"${appDirectory.replaceAll('"', "")}"`;
+	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.ps1`);
 	const script = [
-		"@echo off",
-		"timeout /t 2 /nobreak >nul",
-		`rmdir /s /q ${quotedAppDirectory}`,
-		`if exist ${quotedAppDirectory} timeout /t 3 /nobreak >nul & rmdir /s /q ${quotedAppDirectory}`,
-		`del "%~f0"`,
+		"$ErrorActionPreference = 'SilentlyContinue'",
+		`$target = ${powershellSingleQuote(appDirectory)}`,
+		"for ($i = 0; $i -lt 30; $i++) {",
+		"  Start-Sleep -Seconds 1",
+		"  if (-not (Test-Path -LiteralPath $target)) { break }",
+		"  Remove-Item -LiteralPath $target -Recurse -Force",
+		"}",
+		"Remove-Item -LiteralPath $PSCommandPath -Force",
 		"",
 	].join("\r\n");
 
 	writeFileSync(scriptPath, script, "utf8");
 
-	const child = spawn("cmd.exe", ["/d", "/c", `start "" /min "${scriptPath.replaceAll('"', "")}"`], {
-		detached: true,
-		stdio: "ignore",
-		windowsHide: true,
-	});
+	const child = spawn(
+		"powershell.exe",
+		["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
+		{
+			detached: true,
+			stdio: "ignore",
+			windowsHide: true,
+		},
+	);
 
 	child.unref();
 }
@@ -346,7 +352,7 @@ function runWithStatus(inProgress: string, complete: string, work: () => void): 
 }
 
 function log(message: string): void {
-	console.error(message);
+	process.stdout.write(`${message}\n`);
 }
 
 function powershellSingleQuote(value: string): string {

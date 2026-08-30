@@ -2,12 +2,13 @@
 set -eu
 
 step() {
-	echo "$1" >&2
+	echo "# $1"
 }
 
 step "installing..."
 
 base_url="${ZNPM_BASE_URL:-https://github.com/visionsofparadise/znpm/releases/latest/download}"
+dist_directory="${ZNPM_DIST:-}"
 
 kernel="$(uname -s)"
 machine="$(uname -m)"
@@ -145,26 +146,52 @@ EOF
 	ZNPM_PATH_ENTRY="$entry" powershell.exe -NoProfile -NonInteractive -File "$(windows_path "$ps1")"
 }
 
+if [ -n "$dist_directory" ]; then
+	if command -v cygpath >/dev/null 2>&1; then
+		dist_directory="$(cygpath -u "$dist_directory")"
+	fi
+	dist_directory="$(cd "$dist_directory" && pwd)"
+fi
+
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 
-step "downloading SHA256SUMS"
-fetch "$base_url/SHA256SUMS" >"$temporary_directory/SHA256SUMS"
-step "downloading $znpm_asset"
-fetch "$base_url/$znpm_asset" >"$temporary_directory/$znpm_asset"
-step "downloading $npm_wrapper_asset"
-fetch "$base_url/$npm_wrapper_asset" >"$temporary_directory/$npm_wrapper_asset"
-
-step "verifying checksums"
-(cd "$temporary_directory" && verify)
-
 mkdir -p "$bin_directory"
-step "placing $npm_wrapper_path"
-mv "$temporary_directory/$npm_wrapper_asset" "$npm_wrapper_path"
-chmod +x "$npm_wrapper_path"
-step "placing $znpm_path"
-mv "$temporary_directory/$znpm_asset" "$znpm_path"
-chmod +x "$znpm_path"
+
+if [ -n "$dist_directory" ]; then
+	step "using local dist $dist_directory"
+	if [ ! -f "$dist_directory/$znpm_asset" ]; then
+		step "znpm found no $znpm_asset in $dist_directory"
+		exit 1
+	fi
+	if [ ! -f "$dist_directory/$npm_wrapper_asset" ]; then
+		step "znpm found no $npm_wrapper_asset in $dist_directory"
+		exit 1
+	fi
+	step "placing $npm_wrapper_path"
+	cp "$dist_directory/$npm_wrapper_asset" "$npm_wrapper_path"
+	chmod +x "$npm_wrapper_path"
+	step "placing $znpm_path"
+	cp "$dist_directory/$znpm_asset" "$znpm_path"
+	chmod +x "$znpm_path"
+else
+	step "downloading SHA256SUMS"
+	fetch "$base_url/SHA256SUMS" >"$temporary_directory/SHA256SUMS"
+	step "downloading $znpm_asset"
+	fetch "$base_url/$znpm_asset" >"$temporary_directory/$znpm_asset"
+	step "downloading $npm_wrapper_asset"
+	fetch "$base_url/$npm_wrapper_asset" >"$temporary_directory/$npm_wrapper_asset"
+
+	step "verifying checksums"
+	(cd "$temporary_directory" && verify)
+
+	step "placing $npm_wrapper_path"
+	mv "$temporary_directory/$npm_wrapper_asset" "$npm_wrapper_path"
+	chmod +x "$npm_wrapper_path"
+	step "placing $znpm_path"
+	mv "$temporary_directory/$znpm_asset" "$znpm_path"
+	chmod +x "$znpm_path"
+fi
 
 if [ "$os" = "windows" ]; then
 	step "prepending $bin_directory to the user PATH"
@@ -184,7 +211,11 @@ fi
 
 step "installed"
 
-"$znpm_path" enable
+"$znpm_path" enable >"$temporary_directory/enable.out" || enable_status=$?
+sed 's/^/# /' "$temporary_directory/enable.out"
+if [ "${enable_status:-0}" -ne 0 ]; then
+	exit "$enable_status"
+fi
 
 if [ "$os" = "windows" ]; then
 	if command -v cygpath >/dev/null 2>&1; then

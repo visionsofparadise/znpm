@@ -1,4 +1,9 @@
-param([string]$BaseUrl = "https://github.com/visionsofparadise/znpm/releases/latest/download")
+param(
+	[string]$BaseUrl = $(
+		if ($env:ZNPM_BASE_URL) { $env:ZNPM_BASE_URL }
+		else { "https://github.com/visionsofparadise/znpm/releases/latest/download" }
+	)
+)
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -6,7 +11,7 @@ $ProgressPreference = "SilentlyContinue"
 function Write-Step {
 	param([string]$Message)
 
-	[Console]::Error.WriteLine($Message)
+	Write-Host $Message
 }
 
 function Get-InstallTarget {
@@ -148,39 +153,61 @@ $npmWrapperAsset = "npm-wrapper-$target$exe"
 $znpmPath = Join-Path $binDirectory "znpm$exe"
 $npmWrapperPath = Join-Path $appDirectory "npm-wrapper$exe"
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("znpm-install-" + [Guid]::NewGuid().ToString("n"))
+$distDirectory = $env:ZNPM_DIST
 
 Write-Step "installing $target into $appDirectory"
 
+New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
 
 try {
-	$checksumsPath = Join-Path $temporaryDirectory "SHA256SUMS"
+	if (-not [string]::IsNullOrEmpty($distDirectory)) {
+		$distDirectory = [IO.Path]::GetFullPath($distDirectory)
+		Write-Step "using local dist $distDirectory"
 
-	Write-Step "downloading SHA256SUMS"
-	Invoke-WebRequest -Uri "$BaseUrl/SHA256SUMS" -OutFile $checksumsPath -UseBasicParsing
+		$localZnpm = Join-Path $distDirectory $znpmAsset
+		$localWrapper = Join-Path $distDirectory $npmWrapperAsset
 
-	$checksums = Get-Content -LiteralPath $checksumsPath -Raw
-
-	foreach ($asset in @($znpmAsset, $npmWrapperAsset)) {
-		$assetPath = Join-Path $temporaryDirectory $asset
-
-		Write-Step "downloading $asset"
-		Invoke-WebRequest -Uri "$BaseUrl/$asset" -OutFile $assetPath -UseBasicParsing
-
-		Write-Step "verifying $asset"
-		$expected = Get-ExpectedChecksum -Checksums $checksums -Asset $asset
-		$actual = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash
-
-		if ($actual -ine $expected) {
-			throw "znpm downloaded $asset with checksum $actual, expecting $expected"
+		if (-not (Test-Path -LiteralPath $localZnpm)) {
+			throw "znpm found no $znpmAsset in $distDirectory"
 		}
-	}
 
-	New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
-	Write-Step "placing $npmWrapperPath"
-	Move-Item -LiteralPath (Join-Path $temporaryDirectory $npmWrapperAsset) -Destination $npmWrapperPath -Force
-	Write-Step "placing $znpmPath"
-	Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination $znpmPath -Force
+		if (-not (Test-Path -LiteralPath $localWrapper)) {
+			throw "znpm found no $npmWrapperAsset in $distDirectory"
+		}
+
+		Write-Step "placing $npmWrapperPath"
+		Copy-Item -LiteralPath $localWrapper -Destination $npmWrapperPath -Force
+		Write-Step "placing $znpmPath"
+		Copy-Item -LiteralPath $localZnpm -Destination $znpmPath -Force
+	} else {
+		$checksumsPath = Join-Path $temporaryDirectory "SHA256SUMS"
+
+		Write-Step "downloading SHA256SUMS"
+		Invoke-WebRequest -Uri "$BaseUrl/SHA256SUMS" -OutFile $checksumsPath -UseBasicParsing
+
+		$checksums = Get-Content -LiteralPath $checksumsPath -Raw
+
+		foreach ($asset in @($znpmAsset, $npmWrapperAsset)) {
+			$assetPath = Join-Path $temporaryDirectory $asset
+
+			Write-Step "downloading $asset"
+			Invoke-WebRequest -Uri "$BaseUrl/$asset" -OutFile $assetPath -UseBasicParsing
+
+			Write-Step "verifying $asset"
+			$expected = Get-ExpectedChecksum -Checksums $checksums -Asset $asset
+			$actual = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash
+
+			if ($actual -ine $expected) {
+				throw "znpm downloaded $asset with checksum $actual, expecting $expected"
+			}
+		}
+
+		Write-Step "placing $npmWrapperPath"
+		Move-Item -LiteralPath (Join-Path $temporaryDirectory $npmWrapperAsset) -Destination $npmWrapperPath -Force
+		Write-Step "placing $znpmPath"
+		Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination $znpmPath -Force
+	}
 
 	if (-not $windows) {
 		& chmod +x $npmWrapperPath

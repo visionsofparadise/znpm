@@ -50,8 +50,8 @@ describe("runningAppDirectoryProcessesOf", { timeout: 60_000 }, () => {
 		});
 
 		expect(result.status).toBe(1);
-		expect(result.stderr).toContain("uninstalling...");
-		expect(result.stderr.includes("uninstalled")).toBe(false);
+		expect(result.stdout).toContain("uninstalling...");
+		expect(result.stdout.includes("uninstalled")).toBe(false);
 		expect(result.stderr).toContain("is still running");
 		expect(result.stderr).toContain(String(child.pid));
 		expect(readState(appDirectory).enabled).toBe(true);
