@@ -3,9 +3,11 @@ import { type PathChange, type State } from "./appData";
 import {
 	changesToReverseOf,
 	insertPathEntry,
+	isSymlinkPointingAt,
 	removePathEntry,
 	removePathEntryIgnoringCase,
 	upsertChange,
+	type PosixSymlinkInspection,
 } from "./toggle";
 
 describe("insertPathEntry", () => {
@@ -75,6 +77,57 @@ describe("removePathEntryIgnoringCase", () => {
 
 	it("leaves an empty value empty", () => {
 		expect(removePathEntryIgnoringCase("", "C:\\znpm\\bin", ";")).toBe("");
+	});
+});
+
+describe("isSymlinkPointingAt", () => {
+	const targetPath = "/home/someone/.local/share/znpm/bin/znpm";
+	const inspectionOf = (inspection: Partial<PosixSymlinkInspection>): PosixSymlinkInspection => ({
+		exists: true,
+		isSymbolicLink: true,
+		linkTargetPath: undefined,
+		resolvedLinkPath: undefined,
+		...inspection,
+	});
+
+	it("accepts a symlink whose recorded target is the znpm binary", () => {
+		expect(isSymlinkPointingAt(inspectionOf({ linkTargetPath: targetPath }), targetPath, targetPath)).toBe(true);
+	});
+
+	it("accepts a symlink that resolves to the znpm binary through another link", () => {
+		expect(
+			isSymlinkPointingAt(
+				inspectionOf({ linkTargetPath: "../share/znpm/bin/znpm", resolvedLinkPath: targetPath }),
+				targetPath,
+				targetPath,
+			),
+		).toBe(true);
+	});
+
+	it("refuses a symlink pointing somewhere else", () => {
+		expect(
+			isSymlinkPointingAt(
+				inspectionOf({ linkTargetPath: "/opt/other/znpm", resolvedLinkPath: "/opt/other/znpm" }),
+				targetPath,
+				targetPath,
+			),
+		).toBe(false);
+	});
+
+	it("refuses a regular file standing where the symlink would be", () => {
+		expect(isSymlinkPointingAt(inspectionOf({ isSymbolicLink: false }), targetPath, targetPath)).toBe(false);
+	});
+
+	it("refuses an absent entry", () => {
+		expect(isSymlinkPointingAt(inspectionOf({ exists: false, isSymbolicLink: false }), targetPath, targetPath)).toBe(
+			false,
+		);
+	});
+
+	it("refuses a dangling symlink whose target cannot be resolved", () => {
+		expect(isSymlinkPointingAt(inspectionOf({ linkTargetPath: "/opt/other/znpm" }), targetPath, undefined)).toBe(
+			false,
+		);
 	});
 });
 

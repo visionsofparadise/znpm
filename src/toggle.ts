@@ -17,16 +17,16 @@ export function insertPathEntry(pathValue: string, entry: string, separator: str
 }
 
 export function removePathEntry(pathValue: string, entry: string, separator: string): string {
-	return pathValueWithout(pathValue, separator, (existing) => existing === entry);
+	return removeMatchingPathEntries(pathValue, separator, (existing) => existing === entry);
 }
 
 export function removePathEntryIgnoringCase(pathValue: string, entry: string, separator: string): string {
 	const lowercased = entry.toLowerCase();
 
-	return pathValueWithout(pathValue, separator, (existing) => existing.toLowerCase() === lowercased);
+	return removeMatchingPathEntries(pathValue, separator, (existing) => existing.toLowerCase() === lowercased);
 }
 
-function pathValueWithout(pathValue: string, separator: string, matches: (entry: string) => boolean): string {
+function removeMatchingPathEntries(pathValue: string, separator: string, matches: (entry: string) => boolean): string {
 	const entries = pathValue === "" ? [] : pathValue.split(separator);
 
 	return entries.filter((existing) => !matches(existing)).join(separator);
@@ -60,14 +60,39 @@ export function applyWindowsUserPath(transform: (pathValue: string) => string): 
 	applyWindowsRegistryPath("user", transform);
 }
 
+export interface PosixSymlinkInspection {
+	exists: boolean;
+	isSymbolicLink: boolean;
+	linkTargetPath: string | undefined;
+	resolvedLinkPath: string | undefined;
+}
+
+export function isSymlinkPointingAt(
+	inspection: PosixSymlinkInspection,
+	targetPath: string,
+	resolvedTargetPath: string | undefined,
+): boolean {
+	if (!inspection.exists || !inspection.isSymbolicLink) {
+		return false;
+	}
+
+	if (inspection.linkTargetPath === targetPath) {
+		return true;
+	}
+
+	return inspection.resolvedLinkPath !== undefined && inspection.resolvedLinkPath === resolvedTargetPath;
+}
+
 export function placePosixSymlink(linkPath: string, targetPath: string): void {
-	if (!lstatExists(linkPath)) {
+	const inspection = posixSymlinkInspectionOf(linkPath);
+
+	if (!inspection.exists) {
 		runSudo(["ln", "-s", targetPath, linkPath]);
 
 		return;
 	}
 
-	if (lstatSync(linkPath).isSymbolicLink() && symlinkPointsAt(linkPath, targetPath)) {
+	if (isSymlinkPointingAt(inspection, targetPath, resolvedPathOf(targetPath))) {
 		return;
 	}
 
@@ -75,7 +100,15 @@ export function placePosixSymlink(linkPath: string, targetPath: string): void {
 }
 
 export function removePosixSymlink(linkPath: string): void {
-	if (!lstatExists(linkPath)) {
+	if (!posixSymlinkInspectionOf(linkPath).exists) {
+		return;
+	}
+
+	runSudo(["rm", "-f", linkPath]);
+}
+
+export function removePosixSymlinkPointingAt(linkPath: string, targetPath: string): void {
+	if (!isSymlinkPointingAt(posixSymlinkInspectionOf(linkPath), targetPath, resolvedPathOf(targetPath))) {
 		return;
 	}
 
@@ -100,8 +133,13 @@ function pathChangeKeyOf(change: PathChange): string {
 
 function applyWindowsRegistryPath(scope: "machine" | "user", transform: (pathValue: string) => string): void {
 	const current = readWindowsRegistryPath(scope);
+	const transformed = transform(current.value);
 
-	writeWindowsRegistryPath(scope, transform(current.value), current.kind);
+	if (transformed === current.value) {
+		return;
+	}
+
+	writeWindowsRegistryPath(scope, transformed, current.kind);
 }
 
 function readWindowsRegistryPath(scope: "machine" | "user"): { value: string; kind: number } {
@@ -205,25 +243,30 @@ function runSudo(commandArguments: Array<string>): void {
 	}
 }
 
-function lstatExists(path: string): boolean {
-	try {
-		lstatSync(path);
+function posixSymlinkInspectionOf(linkPath: string): PosixSymlinkInspection {
+	const stats = lstatSync(linkPath, { throwIfNoEntry: false });
 
-		return true;
-	} catch {
-		return false;
+	if (stats === undefined) {
+		return { exists: false, isSymbolicLink: false, linkTargetPath: undefined, resolvedLinkPath: undefined };
 	}
+
+	if (!stats.isSymbolicLink()) {
+		return { exists: true, isSymbolicLink: false, linkTargetPath: undefined, resolvedLinkPath: undefined };
+	}
+
+	return {
+		exists: true,
+		isSymbolicLink: true,
+		linkTargetPath: readlinkSync(linkPath),
+		resolvedLinkPath: resolvedPathOf(linkPath),
+	};
 }
 
-function symlinkPointsAt(linkPath: string, targetPath: string): boolean {
-	if (readlinkSync(linkPath) === targetPath) {
-		return true;
-	}
-
+function resolvedPathOf(path: string): string | undefined {
 	try {
-		return realpathSync(linkPath) === realpathSync(targetPath);
+		return realpathSync(path);
 	} catch {
-		return false;
+		return undefined;
 	}
 }
 

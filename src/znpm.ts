@@ -29,6 +29,7 @@ import {
 	removePathEntry,
 	removePathEntryIgnoringCase,
 	removePosixSymlink,
+	removePosixSymlinkPointingAt,
 	upsertChange,
 } from "./toggle";
 import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
@@ -197,7 +198,7 @@ function removeZnpmExposure(appDirectory: string): void {
 		return;
 	}
 
-	removePosixSymlink(znpmLinkPath);
+	removePosixSymlinkPointingAt(znpmLinkPath, join(binDirectoryOf(appDirectory), "znpm"));
 }
 
 function reverseRecordedChanges(scope: "disable" | "uninstall"): void {
