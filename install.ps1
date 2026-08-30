@@ -76,7 +76,13 @@ if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.In
 	exit 1
 }
 
-$appDirectory = Join-Path $env:LOCALAPPDATA "znpm"
+$localAppData = $env:LOCALAPPDATA
+
+if ([string]::IsNullOrEmpty($localAppData)) {
+	$localAppData = Join-Path $HOME "AppData\Local"
+}
+
+$appDirectory = Join-Path $localAppData "znpm"
 $binDirectory = Join-Path $appDirectory "bin"
 $znpmAsset = "znpm-windows-x64.exe"
 $npmWrapperAsset = "npm-wrapper-windows-x64.exe"
@@ -105,8 +111,8 @@ try {
 	}
 
 	New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
-	Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination (Join-Path $binDirectory "znpm.exe") -Force
 	Move-Item -LiteralPath (Join-Path $temporaryDirectory $npmWrapperAsset) -Destination (Join-Path $appDirectory "npm-wrapper.exe") -Force
+	Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination (Join-Path $binDirectory "znpm.exe") -Force
 } finally {
 	Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
@@ -120,6 +126,10 @@ if (Test-Path -LiteralPath $statePath) {
 
 	if ($state.enabled -eq $true) {
 		& (Join-Path $binDirectory "znpm.exe") place-shim
+
+		if ($LASTEXITCODE -ne 0) {
+			throw "znpm place-shim exited with $LASTEXITCODE"
+		}
 	}
 }
 

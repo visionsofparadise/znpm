@@ -13,6 +13,11 @@ case "$(uname -s)/$(uname -m)" in
 		;;
 esac
 
+if [ -z "${HOME:-}" ]; then
+	echo "znpm requires HOME to be set." >&2
+	exit 1
+fi
+
 app_directory="$HOME/.local/share/znpm"
 bin_directory="$app_directory/bin"
 link_path="/usr/local/bin/znpm"
@@ -32,10 +37,10 @@ fetch() {
 
 verify() {
 	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum -c --ignore-missing SHA256SUMS
+		sha256sum -c --status --ignore-missing SHA256SUMS
 	elif command -v shasum >/dev/null 2>&1; then
 		grep -E "[[:space:]][*]?($znpm_asset|$npm_wrapper_asset)\$" SHA256SUMS >SHA256SUMS.selected
-		shasum -a 256 -c SHA256SUMS.selected
+		shasum -a 256 -c --status SHA256SUMS.selected
 	else
 		echo "znpm requires sha256sum or shasum." >&2
 		exit 1
@@ -60,9 +65,10 @@ fetch "$base_url/$npm_wrapper_asset" >"$temporary_directory/$npm_wrapper_asset"
 (cd "$temporary_directory" && verify)
 
 mkdir -p "$bin_directory"
-mv "$temporary_directory/$znpm_asset" "$bin_directory/znpm"
 mv "$temporary_directory/$npm_wrapper_asset" "$app_directory/npm-wrapper"
-chmod +x "$bin_directory/znpm" "$app_directory/npm-wrapper"
+chmod +x "$app_directory/npm-wrapper"
+mv "$temporary_directory/$znpm_asset" "$bin_directory/znpm"
+chmod +x "$bin_directory/znpm"
 
 if [ -L "$link_path" ]; then
 	privileged rm -f "$link_path"
