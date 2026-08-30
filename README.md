@@ -11,7 +11,7 @@ Every project on a device keeps its own copy of the packages it installs, so the
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iex (irm https://github.com/visionsofparadise/znpm/releases/latest/download/install.ps1)"
+irm https://github.com/visionsofparadise/znpm/releases/latest/download/install.ps1 | iex
 ```
 
 macOS and Linux:
