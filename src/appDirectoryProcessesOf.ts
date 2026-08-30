@@ -51,7 +51,16 @@ export function isAppDirectoryProcessPath(
 	}
 
 	try {
-		return isNormalizedInside(realpathSync(executablePath), appDirectory, platform);
+		const resolvedExecutable = realpathSync(executablePath);
+		let resolvedApp = appDirectory;
+
+		try {
+			resolvedApp = realpathSync(appDirectory);
+		} catch {
+			resolvedApp = appDirectory;
+		}
+
+		return isNormalizedInside(resolvedExecutable, resolvedApp, platform);
 	} catch {
 		return false;
 	}
