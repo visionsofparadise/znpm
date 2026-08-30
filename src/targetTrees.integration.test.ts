@@ -104,10 +104,7 @@ describe("candidateTreeDirectoriesOf", () => {
 	});
 
 	it.skipIf(process.platform !== "win32")("deduplicates by resolved path case-insensitively", () => {
-		const candidateTreeDirectories = candidateTreeDirectoriesOf(leafProject, [
-			"--prefix",
-			leafProject.toUpperCase(),
-		]);
+		const candidateTreeDirectories = candidateTreeDirectoriesOf(leafProject, ["--prefix", leafProject.toUpperCase()]);
 		const matching = candidateTreeDirectories.filter(
 			(candidateTreeDirectory) => identityKeyOf(candidateTreeDirectory) === identityKeyOf(resolve(leafProject)),
 		);
