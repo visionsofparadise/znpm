@@ -2,7 +2,11 @@
 set -eu
 
 step() {
-	echo "# $1"
+	if [ -w /dev/tty ]; then
+		printf '%s\n' "$1" >/dev/tty
+	else
+		printf '%s\n' "$1" >&2
+	fi
 }
 
 step "installing..."
@@ -211,10 +215,10 @@ fi
 
 step "installed"
 
-"$znpm_path" enable >"$temporary_directory/enable.out" || enable_status=$?
-sed 's/^/# /' "$temporary_directory/enable.out"
-if [ "${enable_status:-0}" -ne 0 ]; then
-	exit "$enable_status"
+if [ -w /dev/tty ]; then
+	"$znpm_path" enable >/dev/tty
+else
+	"$znpm_path" enable >&2
 fi
 
 if [ "$os" = "windows" ]; then
