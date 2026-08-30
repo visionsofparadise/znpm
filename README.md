@@ -16,6 +16,12 @@ PowerShell:
 irm https://github.com/visionsofparadise/znpm/releases/latest/download/install.ps1 | iex
 ```
 
+Then use npm as you always have:
+
+```sh
+npm install
+```
+
 ## Reclaiming disk
 
 ```sh
