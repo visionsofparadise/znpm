@@ -3,6 +3,28 @@ param([string]$BaseUrl = "https://github.com/visionsofparadise/znpm/releases/lat
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
+function Get-InstallTarget {
+	$architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+
+	if ($architecture -eq [Runtime.InteropServices.Architecture]::X64) {
+		$arch = "x64"
+	} elseif ($architecture -eq [Runtime.InteropServices.Architecture]::Arm64) {
+		$arch = "arm64"
+	} else {
+		throw "znpm has no build for $architecture"
+	}
+
+	if ($IsLinux) {
+		return "linux-$arch"
+	}
+
+	if ($IsMacOS) {
+		return "darwin-$arch"
+	}
+
+	return "windows-$arch"
+}
+
 function Get-ExpectedChecksum {
 	param([string]$Checksums, [string]$Asset)
 
@@ -71,21 +93,52 @@ public static class EnvironmentNative {
 	[EnvironmentNative]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result) | Out-Null
 }
 
-if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
-	[Console]::Error.WriteLine("znpm supports Windows x64 only.")
-	exit 1
+function Install-PosixZnpmLink {
+	param([string]$ZnpmPath)
+
+	$linkPath = "/usr/local/bin/znpm"
+
+	& sudo mkdir -p /usr/local/bin
+
+	if (Test-Path -LiteralPath $linkPath) {
+		$existing = Get-Item -LiteralPath $linkPath
+
+		if ($existing.LinkType -ne "SymbolicLink") {
+			throw "znpm found $linkPath that it did not create"
+		}
+
+		& sudo rm -f $linkPath
+	}
+
+	& sudo ln -s $ZnpmPath $linkPath
 }
 
-$localAppData = $env:LOCALAPPDATA
+$target = Get-InstallTarget
+$windows = $target.StartsWith("windows-")
+$exe = if ($windows) { ".exe" } else { "" }
 
-if ([string]::IsNullOrEmpty($localAppData)) {
-	$localAppData = Join-Path $HOME "AppData\Local"
+if ($windows) {
+	$localAppData = $env:LOCALAPPDATA
+
+	if ([string]::IsNullOrEmpty($localAppData)) {
+		$localAppData = Join-Path $HOME "AppData\Local"
+	}
+
+	$appDirectory = Join-Path $localAppData "znpm"
+} else {
+	if ([string]::IsNullOrEmpty($HOME)) {
+		throw "znpm requires HOME"
+	}
+
+	$appDirectory = Join-Path $HOME ".local/share/znpm"
 }
 
-$appDirectory = Join-Path $localAppData "znpm"
 $binDirectory = Join-Path $appDirectory "bin"
-$znpmAsset = "znpm-windows-x64.exe"
-$npmWrapperAsset = "npm-wrapper-windows-x64.exe"
+$shimDirectory = Join-Path $appDirectory "shim"
+$znpmAsset = "znpm-$target$exe"
+$npmWrapperAsset = "npm-wrapper-$target$exe"
+$znpmPath = Join-Path $binDirectory "znpm$exe"
+$npmWrapperPath = Join-Path $appDirectory "npm-wrapper$exe"
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("znpm-install-" + [Guid]::NewGuid().ToString("n"))
 
 New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
@@ -111,26 +164,33 @@ try {
 	}
 
 	New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
-	Move-Item -LiteralPath (Join-Path $temporaryDirectory $npmWrapperAsset) -Destination (Join-Path $appDirectory "npm-wrapper.exe") -Force
-	Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination (Join-Path $binDirectory "znpm.exe") -Force
+	Move-Item -LiteralPath (Join-Path $temporaryDirectory $npmWrapperAsset) -Destination $npmWrapperPath -Force
+	Move-Item -LiteralPath (Join-Path $temporaryDirectory $znpmAsset) -Destination $znpmPath -Force
+
+	if (-not $windows) {
+		& chmod +x $npmWrapperPath
+		& chmod +x $znpmPath
+	}
 } finally {
 	Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Add-UserPathEntry -Entry $binDirectory
-
-$statePath = Join-Path $appDirectory "state.json"
-
-if (Test-Path -LiteralPath $statePath) {
-	$state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-
-	if ($state.enabled -eq $true) {
-		& (Join-Path $binDirectory "znpm.exe") place-shim
-
-		if ($LASTEXITCODE -ne 0) {
-			throw "znpm place-shim exited with $LASTEXITCODE"
-		}
-	}
+if ($windows) {
+	Add-UserPathEntry -Entry $binDirectory
+} else {
+	Install-PosixZnpmLink -ZnpmPath $znpmPath
 }
 
-Write-Output "znpm installed. Open a new terminal and run: znpm enable"
+& $znpmPath enable
+
+if ($LASTEXITCODE -ne 0) {
+	throw "znpm enable exited with $LASTEXITCODE"
+}
+
+if ($windows) {
+	$env:Path = "$shimDirectory;$binDirectory;$env:Path"
+} else {
+	$env:PATH = "/usr/local/bin:$env:PATH"
+}
+
+Write-Output "znpm installed and enabled."

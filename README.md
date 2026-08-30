@@ -8,29 +8,21 @@ Every project on a device keeps its own copy of the packages it installs, so the
 
 ## Install
 
-Windows:
+PowerShell:
 
 ```powershell
 irm https://github.com/visionsofparadise/znpm/releases/latest/download/install.ps1 | iex
 ```
 
-macOS and Linux:
+Bash (including Git Bash):
 
 ```sh
 curl -fsSL https://github.com/visionsofparadise/znpm/releases/latest/download/install.sh | sh
 ```
 
-On macOS and Linux the install script may prompt for `sudo` to place `/usr/local/bin/znpm`.
+Install downloads the binaries for this machine, puts znpm on PATH, and runs `znpm enable`. That prompts UAC on Windows and may prompt for `sudo` on macOS and Linux. The shell that ran the one-liner gets the wrapper on PATH; other already-open terminals keep the PATH they started with. Any npm command that mutates the tree then prints a `znpm {...}` summary line to stderr, which is the wrapper reporting what it converted.
 
-A first install leaves znpm disabled. Installing on a device that already has znpm enabled refreshes the wrapper and leaves it enabled. Open a new terminal and turn znpm on:
-
-```sh
-znpm enable
-```
-
-`enable`, `disable`, and `uninstall` change how the whole device resolves npm, so each one asks for elevation: on Windows each prompts UAC to edit the machine PATH, and on macOS and Linux each uses `sudo` to manage the `/usr/local/bin/npm` symlink.
-
-Open one more new terminal after enabling — a running shell keeps the PATH it started with. Any npm command that mutates the tree then prints a `znpm {...}` summary line to stderr, which is the wrapper reporting what it converted.
+`enable`, `disable`, and `uninstall` change how the whole device resolves npm, so each one asks for the same elevation.
 
 ## How it works
 
@@ -45,7 +37,7 @@ Enabling znpm puts a wrapper in front of npm on the device. Every npm command ru
 | `znpm gc`        | Prunes packages referenced by zero projects from the store of this volume. |
 | `znpm uninstall` | Disables znpm and removes it and the wrapper from the device.              |
 
-`enable` and `disable` persist until the other one runs.
+Install turns znpm on. `enable` and `disable` persist until the other one runs.
 
 `disable` and `uninstall` leave every converted tree as it stands: those files keep their hard links and their read-only modes, and npm goes on working over them. The store stays as well — it is pnpm's own store, shared with any pnpm project on the volume — and `znpm gc` prunes the packages no project references any more.
 
@@ -71,12 +63,11 @@ A named package stays exactly as real npm produced it: its own copy, writable.
 
 ## Platforms
 
-- Windows x64
-- Linux x64
-- macOS arm64
-- macOS x64
+- Windows x64 and arm64
+- Linux x64 and arm64
+- macOS arm64 and x64
 
-znpm is at v0.1.x. Windows x64 is exercised heavily, Linux x64 and macOS arm64 are built and smoke-tested in CI, and macOS x64 is cross-compiled and untested.
+znpm is at v0.1.x. CI smokes Windows x64, Linux x64, Linux arm64, and macOS arm64. Windows arm64 and macOS x64 are cross-compiled.
 
 ## License
 

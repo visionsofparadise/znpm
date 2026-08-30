@@ -11,7 +11,9 @@ const bunBinary = join(dirname(require.resolve("bun/package.json")), "bin", "bun
 
 const targets = {
 	"windows-x64": { bunTarget: "bun-windows-x64", extension: ".exe" },
+	"windows-arm64": { bunTarget: "bun-windows-arm64", extension: ".exe" },
 	"linux-x64": { bunTarget: "bun-linux-x64", extension: "" },
+	"linux-arm64": { bunTarget: "bun-linux-arm64", extension: "" },
 	"darwin-arm64": { bunTarget: "bun-darwin-arm64", extension: "" },
 	"darwin-x64": { bunTarget: "bun-darwin-x64", extension: "" },
 };

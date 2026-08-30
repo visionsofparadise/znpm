@@ -3,26 +3,68 @@ set -eu
 
 base_url="${ZNPM_BASE_URL:-https://github.com/visionsofparadise/znpm/releases/latest/download}"
 
-case "$(uname -s)/$(uname -m)" in
-	Linux/x86_64) target="linux-x64" ;;
-	Darwin/arm64) target="darwin-arm64" ;;
-	Darwin/x86_64) target="darwin-x64" ;;
+kernel="$(uname -s)"
+machine="$(uname -m)"
+
+case "$kernel" in
+	Linux) os="linux" ;;
+	Darwin) os="darwin" ;;
+	MINGW* | MSYS* | CYGWIN* | Windows_NT) os="windows" ;;
 	*)
-		echo "znpm supports linux x64, macos arm64, and macos x64 only." >&2
+		echo "znpm has no build for $kernel." >&2
 		exit 1
 		;;
 esac
 
-if [ -z "${HOME:-}" ]; then
-	echo "znpm requires HOME to be set." >&2
-	exit 1
+case "$machine" in
+	x86_64 | amd64) arch="x64" ;;
+	aarch64 | arm64) arch="arm64" ;;
+	*)
+		echo "znpm has no build for $os $machine." >&2
+		exit 1
+		;;
+esac
+
+target="$os-$arch"
+
+if [ "$os" = "windows" ]; then
+	exe=".exe"
+	if [ -n "${LOCALAPPDATA:-}" ]; then
+		windows_home="$LOCALAPPDATA"
+	elif [ -n "${HOME:-}" ]; then
+		windows_home="$HOME/AppData/Local"
+	else
+		echo "znpm requires LOCALAPPDATA or HOME." >&2
+		exit 1
+	fi
+	if command -v cygpath >/dev/null 2>&1; then
+		app_directory="$(cygpath -u "$windows_home")/znpm"
+	else
+		app_directory="$windows_home/znpm"
+	fi
+else
+	exe=""
+	if [ -z "${HOME:-}" ]; then
+		echo "znpm requires HOME." >&2
+		exit 1
+	fi
+	app_directory="$HOME/.local/share/znpm"
 fi
 
-app_directory="$HOME/.local/share/znpm"
 bin_directory="$app_directory/bin"
-link_path="/usr/local/bin/znpm"
-znpm_asset="znpm-$target"
-npm_wrapper_asset="npm-wrapper-$target"
+shim_directory="$app_directory/shim"
+znpm_asset="znpm-$target$exe"
+npm_wrapper_asset="npm-wrapper-$target$exe"
+znpm_path="$bin_directory/znpm$exe"
+npm_wrapper_path="$app_directory/npm-wrapper$exe"
+
+windows_path() {
+	if command -v cygpath >/dev/null 2>&1; then
+		cygpath -w "$1"
+	else
+		printf '%s\n' "$1" | sed -e 's|^/c/|C:/|' -e 's|^/d/|D:/|' -e 's|/|\\|g'
+	fi
+}
 
 fetch() {
 	if command -v curl >/dev/null 2>&1; then
@@ -55,6 +97,46 @@ privileged() {
 	fi
 }
 
+add_windows_user_path() {
+	entry="$(windows_path "$1")"
+	ps1="$temporary_directory/add-user-path.ps1"
+	cat >"$ps1" <<'EOF'
+$ErrorActionPreference = "Stop"
+$entry = $env:ZNPM_PATH_ENTRY
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+if ($null -eq $key) { throw "znpm could not open the user PATH key" }
+try {
+	$kind = 2
+	$value = ""
+	if ($key.GetValueNames() | Where-Object { $_ -ieq "Path" }) {
+		$kind = [int]$key.GetValueKind("Path")
+		$raw = $key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+		if ($raw -is [string[]]) { $value = ($raw -join ";") }
+		elseif ($null -ne $raw) { $value = [string]$raw }
+	}
+	$entries = @()
+	if ($value -ne "") { $entries = $value -split ";" }
+	if ($entries | Where-Object { $_ -ieq $entry }) { return }
+	$key.SetValue("Path", ((@($entry) + $entries) -join ";"), [Microsoft.Win32.RegistryValueKind]$kind)
+} finally {
+	$key.Close()
+}
+if (-not ("EnvironmentNative" -as [type])) {
+	Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class EnvironmentNative {
+  [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+}
+"@
+}
+$result = [UIntPtr]::Zero
+[EnvironmentNative]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result) | Out-Null
+EOF
+	ZNPM_PATH_ENTRY="$entry" powershell.exe -NoProfile -NonInteractive -File "$(windows_path "$ps1")"
+}
+
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 
@@ -65,23 +147,35 @@ fetch "$base_url/$npm_wrapper_asset" >"$temporary_directory/$npm_wrapper_asset"
 (cd "$temporary_directory" && verify)
 
 mkdir -p "$bin_directory"
-mv "$temporary_directory/$npm_wrapper_asset" "$app_directory/npm-wrapper"
-chmod +x "$app_directory/npm-wrapper"
-mv "$temporary_directory/$znpm_asset" "$bin_directory/znpm"
-chmod +x "$bin_directory/znpm"
+mv "$temporary_directory/$npm_wrapper_asset" "$npm_wrapper_path"
+chmod +x "$npm_wrapper_path"
+mv "$temporary_directory/$znpm_asset" "$znpm_path"
+chmod +x "$znpm_path"
 
-if [ -L "$link_path" ]; then
-	privileged rm -f "$link_path"
-elif [ -e "$link_path" ]; then
-	echo "znpm found $link_path that it did not create." >&2
-	exit 1
+if [ "$os" = "windows" ]; then
+	add_windows_user_path "$bin_directory"
+else
+	link_path="/usr/local/bin/znpm"
+	if [ -L "$link_path" ]; then
+		privileged rm -f "$link_path"
+	elif [ -e "$link_path" ]; then
+		echo "znpm found $link_path that it did not create." >&2
+		exit 1
+	fi
+	privileged mkdir -p /usr/local/bin
+	privileged ln -s "$znpm_path" "$link_path"
 fi
 
-privileged mkdir -p /usr/local/bin
-privileged ln -s "$bin_directory/znpm" "$link_path"
+"$znpm_path" enable
 
-if [ -f "$app_directory/state.json" ] && grep -q '"enabled"[[:space:]]*:[[:space:]]*true' "$app_directory/state.json"; then
-	"$bin_directory/znpm" place-shim
+if [ "$os" = "windows" ]; then
+	if command -v cygpath >/dev/null 2>&1; then
+		export PATH="$(cygpath -u "$shim_directory"):$(cygpath -u "$bin_directory"):$PATH"
+	else
+		export PATH="$shim_directory:$bin_directory:$PATH"
+	fi
+else
+	export PATH="/usr/local/bin:$PATH"
 fi
 
-echo "znpm installed. Open a new terminal and run: znpm enable"
+echo "znpm installed and enabled."
