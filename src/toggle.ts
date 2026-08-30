@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { isRecord } from "./utils/isRecord";
+import { runPowerShell } from "./utils/runPowerShell";
 import type { PathChange, State } from "./appData";
 
 export const npmCommandForwarder = '@echo off\r\n"%~dp0npm.exe" %*\r\nexit /b %ERRORLEVEL%\r\n';
@@ -211,24 +212,6 @@ $subKey = "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"`;
 
 	return `$root = [Microsoft.Win32.Registry]::CurrentUser
 $subKey = "Environment"`;
-}
-
-function runPowerShell(script: string): string {
-	const encoded = Buffer.from(script, "utf16le").toString("base64");
-	const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
-		encoding: "utf8",
-		windowsHide: true,
-	});
-
-	if (result.error !== undefined) {
-		throw result.error;
-	}
-
-	if (result.status !== 0) {
-		throw new Error(result.stderr.trim() === "" ? "znpm powershell failed" : result.stderr.trim());
-	}
-
-	return result.stdout;
 }
 
 function runSudo(commandArguments: Array<string>): void {

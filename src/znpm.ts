@@ -14,6 +14,7 @@ import {
 	writeState,
 	type PathChange,
 } from "./appData";
+import { runningAppDirectoryProcessesOf, uninstallBusyMessageOf } from "./appDirectoryProcessesOf";
 import { npmPathOf } from "./npm";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { pruneStoreDirectories } from "./prune";
@@ -159,9 +160,14 @@ function disable(): void {
 }
 
 function uninstall(): void {
-	reverseRecordedChanges("uninstall");
-
 	const appDirectory = appDirectoryOf(process.platform);
+	const running = runningAppDirectoryProcessesOf(appDirectory);
+
+	if (running.length > 0) {
+		throw new Error(uninstallBusyMessageOf(running));
+	}
+
+	reverseRecordedChanges("uninstall");
 
 	removeZnpmExposure(appDirectory);
 	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
