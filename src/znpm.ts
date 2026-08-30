@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -294,25 +294,31 @@ function reinvocationOf(commandArguments: Array<string>): { filePath: string; ar
 }
 
 function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
-	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.ps1`);
-	const script = `$processId = ${process.pid}
-$appDirectory = ${powershellSingleQuote(appDirectory)}
-while (Get-Process -Id $processId -ErrorAction SilentlyContinue) {
-  Start-Sleep -Milliseconds 250
-}
-Remove-Item -LiteralPath $appDirectory -Recurse -Force
-Remove-Item -LiteralPath ${powershellSingleQuote(scriptPath)} -Force -ErrorAction SilentlyContinue
-`;
+	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.cmd`);
+	const quotedAppDirectory = `"${appDirectory.replaceAll('"', "")}"`;
+	const script = [
+		"@echo off",
+		"timeout /t 2 /nobreak >nul",
+		`rmdir /s /q ${quotedAppDirectory}`,
+		`if exist ${quotedAppDirectory} timeout /t 3 /nobreak >nul & rmdir /s /q ${quotedAppDirectory}`,
+		`del "%~f0"`,
+		"",
+	].join("\r\n");
 
 	writeFileSync(scriptPath, script, "utf8");
 
-	const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", scriptPath], {
-		detached: true,
-		stdio: "ignore",
+	const result = spawnSync("cmd.exe", ["/d", "/c", `start "" /min "${scriptPath.replaceAll('"', "")}"`], {
 		windowsHide: true,
+		stdio: "ignore",
 	});
 
-	child.unref();
+	if (result.error !== undefined) {
+		throw result.error;
+	}
+
+	if (result.status !== 0) {
+		throw new Error("znpm could not schedule app directory removal");
+	}
 }
 
 function powershellSingleQuote(value: string): string {
