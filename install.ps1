@@ -11,7 +11,7 @@ $ProgressPreference = "SilentlyContinue"
 function Write-Step {
 	param([string]$Message)
 
-	Write-Host $Message
+	[Console]::Error.WriteLine($Message)
 }
 
 function Get-InstallTarget {

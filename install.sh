@@ -2,11 +2,7 @@
 set -eu
 
 step() {
-	if [ -w /dev/tty ]; then
-		printf '%s\n' "$1" >/dev/tty
-	else
-		printf '%s\n' "$1" >&2
-	fi
+	printf '%s\n' "$1" >&2
 }
 
 step "installing..."
@@ -215,11 +211,7 @@ fi
 
 step "installed"
 
-if [ -w /dev/tty ]; then
-	"$znpm_path" enable >/dev/tty
-else
-	"$znpm_path" enable >&2
-fi
+"$znpm_path" enable >&2
 
 if [ "$os" = "windows" ]; then
 	if command -v cygpath >/dev/null 2>&1; then
