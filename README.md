@@ -4,7 +4,7 @@
 
 ## Why
 
-Every project on a device keeps its own copy of the packages it installs, so the same bytes sit on disk once per repository. znpm replaces those copies with hard links into one content-addressable store per volume, and a package a second project installs costs that project no disk space at all. Measured on a real repository, 99.4% of the installed tree materialized as hard links into the store.
+Every project on a device keeps its own copy of the packages it installs, so the same bytes sit on disk once per repository. znpm replaces those copies with hard links into one content-addressable store per volume, and most of what a second project installs then costs it no new disk space. Measured on one real repository, 99.4% of the installed tree was store-linked before the rule that leaves self-building packages as npm made them; that rule holds about 7% of files back as npm's own copies, and the store carries the rest.
 
 ## Install
 
@@ -20,15 +20,21 @@ macOS and Linux:
 curl -fsSL https://github.com/visionsofparadise/znpm/releases/latest/download/install.sh | sh
 ```
 
-Installing leaves znpm disabled. Open a new terminal and turn it on:
+On macOS and Linux the install script may prompt for `sudo` to place `/usr/local/bin/znpm`.
+
+A first install leaves znpm disabled. Installing on a device that already has znpm enabled refreshes the wrapper and leaves it enabled. Open a new terminal and turn znpm on:
 
 ```sh
 znpm enable
 ```
 
+`enable`, `disable`, and `uninstall` change how the whole device resolves npm, so each one asks for elevation: on Windows each prompts UAC to edit the machine PATH, and on macOS and Linux each uses `sudo` to manage the `/usr/local/bin/npm` symlink.
+
+Open one more new terminal after enabling — a running shell keeps the PATH it started with. Any npm command that mutates the tree then prints a `znpm {...}` summary line to stderr, which is the wrapper reporting what it converted.
+
 ## How it works
 
-Enabling znpm puts a wrapper in front of npm on the device. Every npm command runs real npm with the original arguments verbatim, and the tree npm produces stands as npm made it. The wrapper then hard-links each finished package into the store, taking its identity from what npm recorded. `package.json` and `package-lock.json` come out byte-identical to what real npm would have written, and nothing is written into the repository.
+Enabling znpm puts a wrapper in front of npm on the device. Every npm command runs real npm with the original arguments verbatim, and the tree npm produces stands as npm made it. The wrapper then hard-links each package it can share into the store, taking its identity from what npm recorded — npm extracts its own copy first and the conversion replaces it, so the saving is in what stays on disk rather than in what is downloaded. `package.json` and `package-lock.json` come out byte-identical to what real npm would have written, and the wrapper writes no artifact into a repository: the contents of `node_modules` are the only thing it changes. Converted files are sealed read-only, so editing a package under `node_modules` in place — patch-package's way of working — fails loudly rather than reaching the store and every other project sharing those bytes.
 
 ## Commands
 
@@ -41,9 +47,19 @@ Enabling znpm puts a wrapper in front of npm on the device. Every npm command ru
 
 `enable` and `disable` persist until the other one runs.
 
+`disable` and `uninstall` leave every converted tree as it stands: those files keep their hard links and their read-only modes, and npm goes on working over them. The store stays as well — it is pnpm's own store, shared with any pnpm project on the volume — and `znpm gc` prunes the packages no project references any more.
+
 ## Escape hatches
 
 An npm command under `ZNPM_DISABLE=1` runs real npm directly. An npm command carrying `--znpm-disable` runs real npm with the flag stripped. Both take effect ahead of everything else the wrapper does.
+
+A project names the packages it wants left alone in its own `package.json`:
+
+```json
+{ "znpm": { "ignore": ["cross-spawn"] } }
+```
+
+A named package stays exactly as real npm produced it: its own copy, writable.
 
 ## Guarantees
 
@@ -59,6 +75,8 @@ An npm command under `ZNPM_DISABLE=1` runs real npm directly. An npm command car
 - Linux x64
 - macOS arm64
 - macOS x64
+
+znpm is at v0.1.x. Windows x64 is exercised heavily, Linux x64 and macOS arm64 are built and smoke-tested in CI, and macOS x64 is cross-compiled and untested.
 
 ## License
 
