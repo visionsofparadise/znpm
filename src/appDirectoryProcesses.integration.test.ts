@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { readState, writeState } from "./appData";
+import { npmWrapperPathOf, readState, writeState } from "./appData";
 import { runningAppDirectoryProcessesOf } from "./appDirectoryProcessesOf";
 
 const znpmScript = fileURLToPath(new URL("./znpm.ts", import.meta.url));
@@ -72,8 +72,7 @@ describe("runningAppDirectoryProcessesOf", { timeout: 60_000 }, () => {
 		const localAppData = join(root, "Local");
 		const appDirectory =
 			process.platform === "win32" ? join(localAppData, "znpm") : join(root, ".local", "share", "znpm");
-		const held =
-			process.platform === "win32" ? join(appDirectory, "shim", "npm.exe") : join(appDirectory, "npm-wrapper");
+		const held = npmWrapperPathOf(appDirectory);
 
 		mkdirSync(dirname(held), { recursive: true });
 		copyFileSync(process.execPath, held);

@@ -147,17 +147,18 @@ if ($windows) {
 }
 
 $binDirectory = Join-Path $appDirectory "bin"
-$shimDirectory = Join-Path $appDirectory "shim"
+$npmWrapperDirectory = Join-Path $appDirectory "npm-wrapper"
 $znpmAsset = "znpm-$target$exe"
 $npmWrapperAsset = "npm-wrapper-$target$exe"
 $znpmPath = Join-Path $binDirectory "znpm$exe"
-$npmWrapperPath = Join-Path $appDirectory "npm-wrapper$exe"
+$npmWrapperPath = Join-Path $npmWrapperDirectory "npm$exe"
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("znpm-install-" + [Guid]::NewGuid().ToString("n"))
 $distDirectory = $env:ZNPM_DIST
 
 Write-Step "installing $target into $appDirectory"
 
 New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $npmWrapperDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
 
 try {
@@ -234,8 +235,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($windows) {
-	Write-Step "prepending $shimDirectory and $binDirectory to this process PATH"
-	$env:Path = "$shimDirectory;$binDirectory;$env:Path"
+	Write-Step "prepending $npmWrapperDirectory and $binDirectory to this process PATH"
+	$env:Path = "$npmWrapperDirectory;$binDirectory;$env:Path"
 
 	if (Test-Path Alias:npm) {
 		Remove-Item Alias:npm -Force

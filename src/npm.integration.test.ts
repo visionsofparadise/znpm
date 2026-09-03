@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { npmWrapperPathOf, shimDirectoryOf, writeState } from "./appData";
+import { npmWrapperDirectoryOf, npmWrapperPathOf, writeState } from "./appData";
 import { resolveNpm } from "./npm";
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
@@ -47,8 +47,8 @@ describe("resolveNpm on Windows", () => {
 		nodejsDirectory = join(temporaryRoot, "nodejs");
 		bareDirectory = join(temporaryRoot, "bare");
 
-		mkdirSync(shimDirectoryOf(appDirectory), { recursive: true });
-		writeFileSync(join(shimDirectoryOf(appDirectory), "npm.cmd"), "", "utf8");
+		mkdirSync(npmWrapperDirectoryOf(appDirectory), { recursive: true });
+		writeFileSync(join(npmWrapperDirectoryOf(appDirectory), "npm.cmd"), "", "utf8");
 		writeFileSync(npmWrapperPathOf(appDirectory), "", "utf8");
 		makeNpmInstallation(nodejsDirectory, "npm.cmd", { withNode: true });
 		makeNpmInstallation(bareDirectory, "npm.cmd", { withNode: false });
@@ -85,14 +85,14 @@ describe("resolveNpm on Windows", () => {
 		]);
 	});
 
-	it("skips a candidate npm path sitting in the shim directory", () => {
-		const env = { PATH: pathOf([shimDirectoryOf(appDirectory), nodejsDirectory]) };
+	it("skips a candidate npm path sitting in the wrapper directory", () => {
+		const env = { PATH: pathOf([npmWrapperDirectoryOf(appDirectory), nodejsDirectory]) };
 
 		expect(resolveNpm(env, appDirectory).command).toBe(join(nodejsDirectory, "node.exe"));
 	});
 
-	it("skips a shim directory spelled with the other platform's separator", () => {
-		const env = { PATH: pathOf([shimDirectoryOf(appDirectory).replaceAll("\\", "/"), nodejsDirectory]) };
+	it("skips a wrapper directory spelled with the other platform's separator", () => {
+		const env = { PATH: pathOf([npmWrapperDirectoryOf(appDirectory).replaceAll("\\", "/"), nodejsDirectory]) };
 
 		expect(resolveNpm(env, appDirectory).command).toBe(join(nodejsDirectory, "node.exe"));
 	});
@@ -139,8 +139,7 @@ describe("resolveNpm on POSIX", () => {
 		appDirectory = join(temporaryRoot, "app");
 		npmDirectory = join(temporaryRoot, "usr-local-bin");
 
-		mkdirSync(shimDirectoryOf(appDirectory), { recursive: true });
-		writeFileSync(join(shimDirectoryOf(appDirectory), "npm"), "", "utf8");
+		mkdirSync(npmWrapperDirectoryOf(appDirectory), { recursive: true });
 		writeFileSync(npmWrapperPathOf(appDirectory), "", "utf8");
 		makeNpmInstallation(npmDirectory, "npm", { withNode: false });
 	});
@@ -156,8 +155,8 @@ describe("resolveNpm on POSIX", () => {
 		expect(resolveNpm(env, appDirectory)).toEqual({ command: join(npmDirectory, "npm"), argsPrefix: [] });
 	});
 
-	it("skips a candidate npm path sitting in the shim directory", () => {
-		const env = { PATH: pathOf([shimDirectoryOf(appDirectory), npmDirectory]) };
+	it("skips a candidate npm path sitting in the wrapper directory", () => {
+		const env = { PATH: pathOf([npmWrapperDirectoryOf(appDirectory), npmDirectory]) };
 
 		expect(resolveNpm(env, appDirectory).command).toBe(join(npmDirectory, "npm"));
 	});

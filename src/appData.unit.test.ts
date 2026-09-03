@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
-import { basename, join, sep } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { appDirectoryOf, binDirectoryOf, npmWrapperPathOf, shimDirectoryOf } from "./appData";
+import { appDirectoryOf, binDirectoryOf, npmWrapperDirectoryOf, npmWrapperPathOf } from "./appData";
 
 describe("appDirectoryOf", () => {
 	const originalLocalAppData = process.env.LOCALAPPDATA;
@@ -34,7 +34,11 @@ describe("appDirectoryOf", () => {
 describe("the app directory layout", () => {
 	it("gives every location its own path under the app directory", () => {
 		const appDirectory = "znpm-app";
-		const locations = [binDirectoryOf(appDirectory), shimDirectoryOf(appDirectory), npmWrapperPathOf(appDirectory)];
+		const locations = [
+			binDirectoryOf(appDirectory),
+			npmWrapperDirectoryOf(appDirectory),
+			npmWrapperPathOf(appDirectory),
+		];
 
 		for (const location of locations) {
 			expect(location.startsWith(appDirectory + sep)).toBe(true);
@@ -43,9 +47,8 @@ describe("the app directory layout", () => {
 		expect(new Set(locations).size).toBe(locations.length);
 	});
 
-	it("names the npm wrapper binary apart from real npm", () => {
-		expect(basename(npmWrapperPathOf("znpm-app"))).toBe(
-			process.platform === "win32" ? "npm-wrapper.exe" : "npm-wrapper",
-		);
+	it("names the npm wrapper binary npm inside npm-wrapper", () => {
+		expect(basename(npmWrapperPathOf("znpm-app"))).toBe(process.platform === "win32" ? "npm.exe" : "npm");
+		expect(basename(dirname(npmWrapperPathOf("znpm-app")))).toBe("npm-wrapper");
 	});
 });

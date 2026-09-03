@@ -59,11 +59,11 @@ else
 fi
 
 bin_directory="$app_directory/bin"
-shim_directory="$app_directory/shim"
+npm_wrapper_directory="$app_directory/npm-wrapper"
 znpm_asset="znpm-$target$exe"
 npm_wrapper_asset="npm-wrapper-$target$exe"
 znpm_path="$bin_directory/znpm$exe"
-npm_wrapper_path="$app_directory/npm-wrapper$exe"
+npm_wrapper_path="$npm_wrapper_directory/npm$exe"
 
 step "installing $target into $app_directory"
 
@@ -157,6 +157,7 @@ temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 
 mkdir -p "$bin_directory"
+mkdir -p "$npm_wrapper_directory"
 
 if [ -n "$dist_directory" ]; then
 	step "using local dist $dist_directory"
@@ -215,9 +216,9 @@ step "installed"
 
 if [ "$os" = "windows" ]; then
 	if command -v cygpath >/dev/null 2>&1; then
-		path_prefix="$(cygpath -u "$shim_directory"):$(cygpath -u "$bin_directory")"
+		path_prefix="$(cygpath -u "$npm_wrapper_directory"):$(cygpath -u "$bin_directory")"
 	else
-		path_prefix="$shim_directory:$bin_directory"
+		path_prefix="$npm_wrapper_directory:$bin_directory"
 	fi
 else
 	path_prefix="/usr/local/bin"

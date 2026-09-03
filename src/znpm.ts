@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -8,9 +8,9 @@ import { finishWorkers } from "@pnpm/worker";
 import {
 	appDirectoryOf,
 	binDirectoryOf,
+	npmWrapperDirectoryOf,
 	npmWrapperPathOf,
 	readState,
-	shimDirectoryOf,
 	writeState,
 	type PathChange,
 } from "./appData";
@@ -57,12 +57,6 @@ function main(): void | Promise<void> {
 	const [command] = positionals;
 
 	switch (command) {
-		case "place-shim": {
-			placeShim();
-
-			return;
-		}
-
 		case "enable": {
 			runWithStatus("enabling...", "enabled", enable);
 
@@ -119,32 +113,21 @@ async function gc(): Promise<void> {
 	}
 }
 
-function placeShim(): void {
-	const appDirectory = appDirectoryOf(process.platform);
+function placeNpmCommandForwarder(appDirectory: string): void {
 	const npmWrapperPath = npmWrapperPathOf(appDirectory);
-
-	mkdirSync(appDirectory, { recursive: true });
-	mkdirSync(binDirectoryOf(appDirectory), { recursive: true });
 
 	if (!existsSync(npmWrapperPath)) {
 		throw new Error(`znpm found no npm wrapper binary at ${npmWrapperPath}`);
 	}
 
 	if (process.platform !== "win32") {
-		log(`using ${npmWrapperPath}`);
-
 		return;
 	}
 
-	const shimDirectory = shimDirectoryOf(appDirectory);
-	const shimNpm = join(shimDirectory, "npm.exe");
-	const shimCmd = join(shimDirectory, "npm.cmd");
+	const npmCommandPath = join(npmWrapperDirectoryOf(appDirectory), "npm.cmd");
 
-	mkdirSync(shimDirectory, { recursive: true });
-	log(`writing ${shimNpm}`);
-	copyFileSync(npmWrapperPath, shimNpm);
-	log(`writing ${shimCmd}`);
-	writeFileSync(shimCmd, npmCommandForwarder, "utf8");
+	log(`writing ${npmCommandPath}`);
+	writeFileSync(npmCommandPath, npmCommandForwarder, "utf8");
 }
 
 function enable(): void {
@@ -152,7 +135,7 @@ function enable(): void {
 	const npmPath = npmPathOf(process.env, appDirectory);
 
 	log(`using real npm at ${npmPath}`);
-	placeShim();
+	placeNpmCommandForwarder(appDirectory);
 	writeState(appDirectory, { ...readState(appDirectory), npmPath });
 	applyToggleChanges(appDirectory);
 	writeState(appDirectory, { ...readState(appDirectory), enabled: true });
@@ -195,11 +178,11 @@ function uninstall(): void {
 
 function applyToggleChanges(appDirectory: string): void {
 	if (process.platform === "win32") {
-		const shimDirectory = shimDirectoryOf(appDirectory);
+		const npmWrapperDirectory = npmWrapperDirectoryOf(appDirectory);
 
-		log(`prepending ${shimDirectory} to the machine PATH`);
-		applyMachinePathElevated("insert", shimDirectory);
-		recordChange(appDirectory, { target: "windowsMachinePath", entry: shimDirectory });
+		log(`prepending ${npmWrapperDirectory} to the machine PATH`);
+		applyMachinePathElevated("insert", npmWrapperDirectory);
+		recordChange(appDirectory, { target: "windowsMachinePath", entry: npmWrapperDirectory });
 
 		return;
 	}

@@ -26,12 +26,12 @@ export function binDirectoryOf(appDirectory: string): string {
 	return join(appDirectory, "bin");
 }
 
-export function shimDirectoryOf(appDirectory: string): string {
-	return join(appDirectory, "shim");
+export function npmWrapperDirectoryOf(appDirectory: string): string {
+	return join(appDirectory, "npm-wrapper");
 }
 
 export function npmWrapperPathOf(appDirectory: string): string {
-	return join(appDirectory, process.platform === "win32" ? "npm-wrapper.exe" : "npm-wrapper");
+	return join(npmWrapperDirectoryOf(appDirectory), process.platform === "win32" ? "npm.exe" : "npm");
 }
 
 export function readState(appDirectory: string): State {

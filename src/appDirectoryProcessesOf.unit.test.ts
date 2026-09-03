@@ -8,11 +8,15 @@ describe("isAppDirectoryProcessPath", () => {
 	it("matches executables under the Windows app directory without regard to case", () => {
 		const appDirectory = "C:\\Users\\mttcv\\AppData\\Local\\znpm";
 
-		expect(isAppDirectoryProcessPath(`${appDirectory}\\shim\\npm.exe`, appDirectory, "win32")).toBe(true);
+		expect(isAppDirectoryProcessPath(`${appDirectory}\\npm-wrapper\\npm.exe`, appDirectory, "win32")).toBe(true);
 		expect(isAppDirectoryProcessPath(`${appDirectory}\\npm-wrapper.exe`, appDirectory, "win32")).toBe(true);
 		expect(isAppDirectoryProcessPath(`${appDirectory}\\bin\\znpm.exe`, appDirectory, "win32")).toBe(true);
 		expect(
-			isAppDirectoryProcessPath("c:\\users\\mttcv\\appdata\\local\\znpm\\shim\\npm.exe", appDirectory, "win32"),
+			isAppDirectoryProcessPath(
+				"c:\\users\\mttcv\\appdata\\local\\znpm\\npm-wrapper\\npm.exe",
+				appDirectory,
+				"win32",
+			),
 		).toBe(true);
 	});
 
@@ -65,7 +69,7 @@ describe("appDirectoryProcessesOf", () => {
 		expect(
 			appDirectoryProcessesOf(
 				[
-					{ pid: 40, path: `${appDirectory}\\shim\\npm.exe` },
+					{ pid: 40, path: `${appDirectory}\\npm-wrapper\\npm.exe` },
 					{ pid: 7, path: "C:\\Program Files\\nodejs\\node.exe" },
 					{ pid: 12, path: `${appDirectory}\\npm-wrapper.exe` },
 				],
@@ -75,7 +79,7 @@ describe("appDirectoryProcessesOf", () => {
 			),
 		).toEqual([
 			{ pid: 12, path: `${appDirectory}\\npm-wrapper.exe` },
-			{ pid: 40, path: `${appDirectory}\\shim\\npm.exe` },
+			{ pid: 40, path: `${appDirectory}\\npm-wrapper\\npm.exe` },
 		]);
 	});
 
@@ -83,14 +87,14 @@ describe("appDirectoryProcessesOf", () => {
 		expect(
 			appDirectoryProcessesOf(
 				[
-					{ pid: 40, path: `${appDirectory}\\shim\\npm.exe` },
+					{ pid: 40, path: `${appDirectory}\\npm-wrapper\\npm.exe` },
 					{ pid: 40, path: `${appDirectory}\\state.json` },
 				],
 				appDirectory,
 				99,
 				"win32",
 			),
-		).toEqual([{ pid: 40, path: `${appDirectory}\\shim\\npm.exe` }]);
+		).toEqual([{ pid: 40, path: `${appDirectory}\\npm-wrapper\\npm.exe` }]);
 	});
 });
 
@@ -98,12 +102,12 @@ describe("uninstallBusyMessageOf", () => {
 	it("states each still-running process on its own line", () => {
 		expect(
 			uninstallBusyMessageOf([
-				{ pid: 25180, path: "C:\\Users\\mttcv\\AppData\\Local\\znpm\\shim\\npm.exe" },
+				{ pid: 25180, path: "C:\\Users\\mttcv\\AppData\\Local\\znpm\\npm-wrapper\\npm.exe" },
 				{ pid: 12, path: "C:\\Users\\mttcv\\AppData\\Local\\znpm\\bin\\znpm.exe" },
 			]),
 		).toBe(
 			[
-				"znpm uninstall: process 25180 is still running: C:\\Users\\mttcv\\AppData\\Local\\znpm\\shim\\npm.exe",
+				"znpm uninstall: process 25180 is still running: C:\\Users\\mttcv\\AppData\\Local\\znpm\\npm-wrapper\\npm.exe",
 				"znpm uninstall: process 12 is still running: C:\\Users\\mttcv\\AppData\\Local\\znpm\\bin\\znpm.exe",
 			].join("\n"),
 		);

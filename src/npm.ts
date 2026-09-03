@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { npmWrapperPathOf, readState, shimDirectoryOf } from "./appData";
+import { npmWrapperDirectoryOf, npmWrapperPathOf, readState } from "./appData";
 
 export interface Npm {
 	command: string;
@@ -22,7 +22,7 @@ export function resolveNpm(env: NodeJS.ProcessEnv, appDirectory: string): Npm {
 }
 
 function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | undefined {
-	const shimDirectory = canonicalPathOf(shimDirectoryOf(appDirectory));
+	const npmWrapperDirectory = canonicalPathOf(npmWrapperDirectoryOf(appDirectory));
 	const npmWrapperPath = canonicalPathOf(npmWrapperPathOf(appDirectory));
 	const npmName = process.platform === "win32" ? "npm.cmd" : "npm";
 
@@ -37,7 +37,7 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | 
 			continue;
 		}
 
-		if (canonicalPathOf(dirname(candidateNpmPath)) === shimDirectory) {
+		if (canonicalPathOf(dirname(candidateNpmPath)) === npmWrapperDirectory) {
 			continue;
 		}
 
