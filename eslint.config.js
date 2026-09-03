@@ -176,7 +176,7 @@ export default tseslint.config(
 				},
 			],
 			"@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true, allowBoolean: true }],
-			"no-console": ["warn", { allow: ["warn", "error"] }],
+			"no-console": ["warn", { allow: ["log", "warn", "error"] }],
 			"prefer-const": "error",
 			"no-var": "error",
 			eqeqeq: ["error", "always"],

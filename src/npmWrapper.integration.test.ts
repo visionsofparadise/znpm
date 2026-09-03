@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { version as znpmVersion } from "../package.json" with { type: "json" };
 import { type ConvertSummary } from "./convert";
+import { candidatePackagesOf, readHiddenLockfile } from "./hiddenLockfile";
+import { cacacheTarballPathOf } from "./npmCache";
 
 const npmWrapperScript = fileURLToPath(new URL("./npmWrapper.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
@@ -88,14 +90,17 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 			"utf8",
 		);
 
-		const result = runShadow({ npmArguments: ["install", "left-pad"] });
+		const result = runShadow({
+			npmArguments: ["install", "left-pad"],
+			env: { npm_config_loglevel: "verbose" },
+		});
 
 		expect(result.status).toBe(0);
 		expect(converterOutputLinesOf(result.stderr).some((line) => line.startsWith("znpm {"))).toBe(true);
 	});
 
 	it("does not convert after --version", () => {
-		const result = runShadow({ npmArguments: ["--version"] });
+		const result = runShadow({ npmArguments: ["--version"], env: { npm_config_loglevel: "verbose" } });
 
 		expect(result.status).toBe(0);
 		expect(converterSummariesOf(result.stderr)).toEqual([]);
@@ -123,7 +128,10 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 			"utf8",
 		);
 
-		const result = runShadow({ npmArguments: ["install", "-g", "cowsay"] });
+		const result = runShadow({
+			npmArguments: ["install", "-g", "cowsay"],
+			env: { npm_config_loglevel: "verbose" },
+		});
 
 		expect(result.status).toBe(0);
 		expect(JSON.parse(result.stdout)).toEqual({
@@ -184,14 +192,14 @@ describe("the npm wrapper converting captured npm commands", { timeout: 180_000 
 	it("store-links a captured npm install and exits 0", () => {
 		const workspace = openWorkspace();
 		const fixture = writeFixture(workspace, "fixture", { ms: "2.1.3" });
-		const result = runCapturedShadow(fixture, ["install"], workspace);
+		const result = runCapturedShadow(fixture, ["install"], workspace, { npm_config_loglevel: "verbose" });
 		const summaries = converterSummariesOf(result.stderr);
 
 		expect(result.status).toBe(0);
 		expect(statSync(join(fixture, "node_modules", "ms", "package.json")).nlink).toBeGreaterThan(1);
 		expect(summaries.length).toBeGreaterThan(0);
 		expect(summaries[0]?.imported).toBeGreaterThan(0);
-		expect(summaries[0]?.failed).toBe(0);
+		expect(summaries[0]?.failures).toEqual([]);
 	});
 
 	it("passes npm run and npm test through with zero converter output", () => {
@@ -277,6 +285,7 @@ describe("the npm wrapper converting captured npm commands", { timeout: 180_000 
 
 		expect(result.status).toBe(0);
 		expect(result.stderr).toMatch(/znpm could not convert /);
+		expect(result.stderr).toMatch(/node_modules is as npm left it/);
 		expect(statSync(join(fixture, "node_modules", "ms", "package.json")).nlink).toBe(1);
 	});
 
@@ -288,7 +297,49 @@ describe("the npm wrapper converting captured npm commands", { timeout: 180_000 
 		expect(result.status).toBe(0);
 		expect(() => JSON.parse(result.stdout) as unknown).not.toThrow();
 		expect(statSync(join(fixture, "node_modules", "ms", "package.json")).nlink).toBeGreaterThan(1);
-		expect(converterOutputLinesOf(result.stderr).length).toBeGreaterThan(0);
+		expect(result.stdout.split(/\r?\n/).filter((line) => line.startsWith("znpm"))).toEqual([]);
+		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
+	});
+
+	it("prints one stdout line when packages stay unlinked", () => {
+		const workspace = openWorkspace();
+		const fixture = writeFixture(workspace, "fixture", { ms: "2.1.3", abbrev: "3.0.1" });
+
+		expect(runCapturedShadow(fixture, ["install"], workspace, { ZNPM_DISABLE: "1" }).status).toBe(0);
+
+		const victim = tarballCandidatePackageOf(fixture, "abbrev");
+		const cacachePath = cacacheTarballPathOf(workspace.cache, victim.integrity);
+
+		expect(cacachePath).toBeDefined();
+
+		if (cacachePath !== undefined) {
+			const original = readFileSync(cacachePath);
+			const corrupted = Buffer.from(original);
+
+			corrupted.writeUInt8(corrupted.readUInt8(20) ^ 0xff, 20);
+			writeFileSync(cacachePath, corrupted);
+		}
+
+		const result = runCapturedShadow(fixture, ["install"], workspace);
+		const msManifest = join(fixture, "node_modules", "ms", "package.json");
+		const abbrevManifest = join(fixture, "node_modules", "abbrev", "package.json");
+
+		expect(result.status).toBe(0);
+		expect(result.stdout).toContain("znpm: 1 package not linked to the store; node_modules is unaffected");
+		expect(result.stderr.split(/\r?\n/).filter((line) => line.startsWith("znpm "))).toEqual([]);
+		expect(statSync(msManifest).nlink).toBeGreaterThan(1);
+		expect(statSync(abbrevManifest).nlink).toBe(1);
+		expect(JSON.parse(readFileSync(abbrevManifest, "utf8")).version).toBe(victim.version);
+	});
+
+	it("prints nothing when every package links", () => {
+		const workspace = openWorkspace();
+		const fixture = writeFixture(workspace, "fixture", { ms: "2.1.3" });
+		const result = runCapturedShadow(fixture, ["install"], workspace);
+
+		expect(result.status).toBe(0);
+		expect(result.stdout.split(/\r?\n/).filter((line) => line.startsWith("znpm"))).toEqual([]);
+		expect(result.stderr.split(/\r?\n/).filter((line) => line.startsWith("znpm"))).toEqual([]);
 	});
 
 	function openWorkspace(): Workspace {
@@ -351,6 +402,20 @@ function runCapturedShadow(
 	env.npm_config_cache = workspace.cache;
 	delete env.ZNPM_INTERNAL;
 	delete env.ZNPM_DISABLE;
+	delete env.npm_config_loglevel;
+	delete env.npm_config_json;
+
+	if (envOverrides.ZNPM_DISABLE !== undefined) {
+		env.ZNPM_DISABLE = envOverrides.ZNPM_DISABLE;
+	}
+
+	if (envOverrides.npm_config_loglevel !== undefined) {
+		env.npm_config_loglevel = envOverrides.npm_config_loglevel;
+	}
+
+	if (envOverrides.npm_config_json !== undefined) {
+		env.npm_config_json = envOverrides.npm_config_json;
+	}
 
 	if (envOverrides.ZNPM_STORE_DIR !== undefined) {
 		env.ZNPM_STORE_DIR = envOverrides.ZNPM_STORE_DIR;
@@ -374,4 +439,18 @@ function converterSummariesOf(stderr: string): Array<ConvertSummary> {
 	return converterOutputLinesOf(stderr)
 		.filter((line) => line.startsWith("znpm {"))
 		.map((line) => JSON.parse(line.slice("znpm ".length)) as ConvertSummary);
+}
+
+function tarballCandidatePackageOf(fixture: string, name: string): { integrity: string; version: string | undefined } {
+	const hiddenLockfile = readHiddenLockfile(fixture);
+	const { candidatePackages } = candidatePackagesOf(hiddenLockfile);
+	const match = candidatePackages.find(
+		(candidatePackage) => candidatePackage.name === name && "integrity" in candidatePackage.resolution,
+	);
+
+	if (match === undefined || !("integrity" in match.resolution)) {
+		throw new Error(`znpm test found no tarball entry for ${name}`);
+	}
+
+	return { integrity: match.resolution.integrity, version: match.version };
 }

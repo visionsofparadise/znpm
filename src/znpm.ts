@@ -335,7 +335,7 @@ function runWithStatus(inProgress: string, complete: string, work: () => void): 
 }
 
 function log(message: string): void {
-	console.error(message);
+	console.log(message);
 }
 
 function powershellSingleQuote(value: string): string {

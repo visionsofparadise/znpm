@@ -27,7 +27,7 @@ export interface ConvertSummary {
 	linked: number;
 	imported: number;
 	locked: number;
-	failed: number;
+	failures: Array<{ location: string; message: string }>;
 	cacheMisses: number;
 	storeDirectory: string;
 }
@@ -65,7 +65,7 @@ export async function convert(
 
 	let imported = 0;
 	let locked = 0;
-	let failed = 0;
+	const failures: ConvertSummary["failures"] = [];
 	let cacheMisses = 0;
 
 	if (toImport.length > 0) {
@@ -88,7 +88,7 @@ export async function convert(
 
 			imported += outcome.imported;
 			locked += outcome.locked;
-			failed += outcome.failed;
+			failures.push(...outcome.failures);
 			cacheMisses += outcome.cacheMisses;
 		}
 
@@ -112,7 +112,7 @@ export async function convert(
 		linked: linked.length,
 		imported,
 		locked,
-		failed,
+		failures,
 		cacheMisses,
 		storeDirectory,
 	};
@@ -132,7 +132,7 @@ function emptySummary(storeDirectory: string): ConvertSummary {
 		linked: 0,
 		imported: 0,
 		locked: 0,
-		failed: 0,
+		failures: [],
 		cacheMisses: 0,
 		storeDirectory,
 	};
@@ -182,11 +182,11 @@ async function importBatch(
 		npmCacheDirectory: string;
 		storeController: StoreController;
 	},
-): Promise<{ imported: number; locked: number; failed: number; cacheMisses: number }> {
+): Promise<{ imported: number; locked: number; failures: ConvertSummary["failures"]; cacheMisses: number }> {
 	let cursor = 0;
 	let imported = 0;
 	let locked = 0;
-	let failed = 0;
+	const failures: ConvertSummary["failures"] = [];
 	let cacheMisses = 0;
 	const workerCount = Math.max(1, Math.min(4, calcMaxWorkers()));
 
@@ -241,17 +241,17 @@ async function importBatch(
 				sealPackageDirectory(packageDirectory);
 				imported++;
 			} catch (error: unknown) {
-				failed++;
-				console.error(
-					`znpm could not import ${candidatePackage.location}: ${error instanceof Error ? error.message : String(error)}`,
-				);
+				failures.push({
+					location: candidatePackage.location,
+					message: error instanceof Error ? error.message : String(error),
+				});
 			}
 		}
 	};
 
 	await Promise.all(Array.from({ length: workerCount }, worker));
 
-	return { imported, locked, failed, cacheMisses };
+	return { imported, locked, failures, cacheMisses };
 }
 
 function filesMapOf(

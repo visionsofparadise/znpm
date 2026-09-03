@@ -52,7 +52,7 @@ describe("convert", { timeout: 180_000 }, () => {
 		const firstManifest = join(first, "node_modules", "ms", "package.json");
 		const required = createRequire(join(first, "package.json"));
 
-		expect(summary.failed).toBe(0);
+		expect(summary.failures.length).toBe(0);
 		expect(summary.imported).toBeGreaterThan(0);
 		expect(statSync(firstManifest).nlink).toBeGreaterThan(1);
 		expect(statSync(firstManifest).mode & 0o777).toBe(0o444);
@@ -277,7 +277,7 @@ describe("convert", { timeout: 180_000 }, () => {
 			const summary = await convertProject(fixture, workspace);
 
 			expect(summary.cacheMisses).toBe(0);
-			expect(summary.failed).toBe(0);
+			expect(summary.failures.length).toBe(0);
 			expect(summary.imported).toBeGreaterThan(0);
 		});
 
@@ -304,7 +304,7 @@ describe("convert", { timeout: 180_000 }, () => {
 			});
 
 			expect(summary.cacheMisses).toBe(1);
-			expect(summary.failed).toBe(0);
+			expect(summary.failures.length).toBe(0);
 			expect(summary.imported).toBeGreaterThan(0);
 			expect(statSync(join(fixture, "node_modules", "abbrev", "package.json")).nlink).toBeGreaterThan(1);
 		});
@@ -338,7 +338,8 @@ describe("convert", { timeout: 180_000 }, () => {
 			const abbrevManifest = join(fixture, "node_modules", "abbrev", "package.json");
 
 			expect(summary.cacheMisses).toBe(0);
-			expect(summary.failed).toBe(1);
+			expect(summary.failures.length).toBe(1);
+			expect(summary.failures[0]?.location).toBe("node_modules/abbrev");
 			expect(statSync(abbrevManifest).nlink).toBe(1);
 			expect(JSON.parse(readFileSync(abbrevManifest, "utf8")).version).toBe(victim.version);
 		});
@@ -351,7 +352,7 @@ describe("convert", { timeout: 180_000 }, () => {
 
 		expect(summary.entries).toBe(0);
 		expect(summary.imported).toBe(0);
-		expect(summary.failed).toBe(0);
+		expect(summary.failures.length).toBe(0);
 		expect(existsSync(join(fixture, "node_modules"))).toBe(false);
 	});
 
@@ -368,8 +369,8 @@ describe("convert", { timeout: 180_000 }, () => {
 			convertProject(second, workspace),
 		]);
 
-		expect(firstSummary.failed).toBe(0);
-		expect(secondSummary.failed).toBe(0);
+		expect(firstSummary.failures.length).toBe(0);
+		expect(secondSummary.failures.length).toBe(0);
 		expect(statSync(join(first, "node_modules", "ms", "package.json")).ino).toBe(
 			statSync(join(second, "node_modules", "ms", "package.json")).ino,
 		);
@@ -414,7 +415,7 @@ describe("convert", { timeout: 180_000 }, () => {
 		const summary = await convertProject(fixture, workspace);
 		const required = createRequire(join(fixture, "package.json"));
 
-		expect(summary.failed).toBe(0);
+		expect(summary.failures.length).toBe(0);
 		expect(statSync(join(parent, "package.json")).nlink).toBeGreaterThan(1);
 		expect(existsSync(bundledChild)).toBe(true);
 		expect(statSync(bundledChild).nlink).toBeGreaterThan(1);

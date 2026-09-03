@@ -7,10 +7,12 @@ import { isNpmVersionQuery } from "./isNpmVersionQuery";
 import { isTreeMutatingNpmCommand } from "./isTreeMutatingNpmCommand";
 import { resolveNpm, type Npm } from "./npm";
 import { npmCacheDirectoryOf } from "./npmCache";
+import { npmReportLevelOf, type NpmReportLevel } from "./npmReportLevelOf";
 import { npmVersionLineOf } from "./npmVersionLineOf";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
 import { candidateTreeDirectoriesOf } from "./targetTrees";
+import { unlinkedLineOf } from "./unlinkedLineOf";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
@@ -54,10 +56,11 @@ async function main(): Promise<void> {
 async function convertAfterNpm(npm: Npm, npmArguments: Array<string>): Promise<void> {
 	const candidateTreeDirectories = candidateTreeDirectoriesOf(process.cwd(), npmArguments);
 	const status = spawnNpm(npm, npmArguments, { ...process.env, ZNPM_INTERNAL: "1" });
+	const reportLevel = npmReportLevelOf(npmArguments, process.env);
 
 	try {
 		for (const candidateTreeDirectory of candidateTreeDirectories) {
-			await convertCandidateTreeDirectory(candidateTreeDirectory);
+			await convertCandidateTreeDirectory(candidateTreeDirectory, reportLevel);
 		}
 	} finally {
 		await finishWorkers();
@@ -66,7 +69,7 @@ async function convertAfterNpm(npm: Npm, npmArguments: Array<string>): Promise<v
 	process.exit(status);
 }
 
-async function convertCandidateTreeDirectory(projectDirectory: string): Promise<void> {
+async function convertCandidateTreeDirectory(projectDirectory: string, reportLevel: NpmReportLevel): Promise<void> {
 	const storeDirectory = storeDirectoryOverrideOf(process.env);
 
 	try {
@@ -75,11 +78,18 @@ async function convertCandidateTreeDirectory(projectDirectory: string): Promise<
 			pnpmAppDirectory: pnpmAppDirectoryOf(process.env, process.platform),
 			npmCacheDirectory: npmCacheDirectoryOf(process.env, process.platform),
 		});
+		const unlinked = summary.failures.length + summary.locked;
 
-		console.error(`znpm ${JSON.stringify(summary)}`);
+		if (reportLevel === "verbose") {
+			console.error(`znpm ${JSON.stringify(summary)}`);
+		}
+
+		if ((reportLevel === "line" || reportLevel === "verbose") && unlinked > 0) {
+			process.stdout.write(`${unlinkedLineOf(unlinked)}\n`);
+		}
 	} catch (error: unknown) {
 		console.error(
-			`znpm could not convert ${projectDirectory}: ${error instanceof Error ? error.message : String(error)}`,
+			`znpm could not convert ${projectDirectory}: ${error instanceof Error ? error.message : String(error)}; node_modules is as npm left it`,
 		);
 	}
 }
