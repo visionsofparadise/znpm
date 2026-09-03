@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	linkSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -10,13 +11,39 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { importPackageDirectory } from "./importPackageDirectory";
+
+const unknownLinkRejection = vi.hoisted(() => ({
+	armed: false,
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const fsPromises = await importOriginal<typeof import("node:fs/promises")>();
+
+	return {
+		...fsPromises,
+		link: vi.fn(async (storePath: string, dest: string) => {
+			if (unknownLinkRejection.armed) {
+				unknownLinkRejection.armed = false;
+
+				throw Object.assign(new Error("unknown error"), {
+					code: "UNKNOWN",
+					errno: -4094,
+				});
+			}
+
+			return fsPromises.link(storePath, dest);
+		}),
+	};
+});
 
 describe("importPackageDirectory", () => {
 	const roots: Array<string> = [];
 
 	afterEach(() => {
+		unknownLinkRejection.armed = false;
+
 		for (const root of roots.splice(0)) {
 			rmSync(root, { recursive: true, force: true, maxRetries: 3 });
 		}
@@ -106,6 +133,59 @@ describe("importPackageDirectory", () => {
 			`${JSON.stringify({ name: "pkg", version: "1.0.0" })}\n`,
 		);
 		expect(siblingTempsOf(root, "package")).toEqual([]);
+	});
+
+	it("copies a file the store refuses to link", async () => {
+		const root = openRoot();
+		const store = join(root, "store");
+		const dest = join(root, "package");
+		const storeLicense = join(store, "license");
+		const storeManifest = join(store, "package.json");
+
+		mkdirSync(store);
+		writeFileSync(storeLicense, "MIT\n");
+		writeFileSync(storeManifest, `${JSON.stringify({ name: "pkg", version: "1.0.0" })}\n`);
+		mkdirSync(dest);
+		writeFileSync(join(dest, "package.json"), `${JSON.stringify({ name: "pkg", version: "1.0.0" })}\n`);
+		writeFileSync(join(dest, "license"), "old\n");
+
+		unknownLinkRejection.armed = true;
+
+		await expect(
+			importPackageDirectory(dest, {
+				license: storeLicense,
+				"package.json": storeManifest,
+			}),
+		).resolves.toBe("imported");
+
+		expect(readFileSync(join(dest, "license"), "utf8")).toBe(readFileSync(storeLicense, "utf8"));
+		expect(statSync(join(dest, "license")).nlink).toBe(1);
+		expect(statSync(join(dest, "package.json")).ino).toBe(statSync(storeManifest).ino);
+	});
+
+	it.runIf(process.platform === "win32")("copies past the NTFS hard-link cap", async () => {
+		const root = openRoot();
+		const store = join(root, "store");
+		const dest = join(root, "package");
+		const storeLicense = join(store, "license");
+
+		mkdirSync(store);
+		writeFileSync(storeLicense, "MIT\n");
+		mkdirSync(dest);
+		writeFileSync(join(dest, "license"), "old\n");
+
+		for (let linkIndex = 0; linkIndex < 1023; linkIndex += 1) {
+			linkSync(storeLicense, join(root, `link-${linkIndex}`));
+		}
+
+		await expect(
+			importPackageDirectory(dest, {
+				license: storeLicense,
+			}),
+		).resolves.toBe("imported");
+
+		expect(readFileSync(join(dest, "license"), "utf8")).toBe(readFileSync(storeLicense, "utf8"));
+		expect(statSync(join(dest, "license")).nlink).toBe(1);
 	});
 
 	function openRoot(): string {

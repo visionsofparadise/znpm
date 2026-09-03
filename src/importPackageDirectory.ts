@@ -68,13 +68,7 @@ async function linkOrCopy(storePath: string, dest: string): Promise<void> {
 			return;
 		}
 
-		if (isErrno(error, "EMLINK") || isErrno(error, "EXDEV")) {
-			await copyFile(storePath, dest);
-
-			return;
-		}
-
-		throw error;
+		await copyFile(storePath, dest);
 	}
 }
 
