@@ -154,12 +154,22 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 			PATH: [fakeNpmDirectory, process.env.PATH ?? ""].join(delimiter),
 		};
 
+		deleteMatchingEnvKeys(env, ["npm_config_loglevel", "npm_config_json"]);
+
 		if (options.env?.ZNPM_INTERNAL === undefined) {
 			delete env.ZNPM_INTERNAL;
 		}
 
 		if (options.env?.ZNPM_DISABLE === undefined) {
 			delete env.ZNPM_DISABLE;
+		}
+
+		if (options.env?.npm_config_loglevel !== undefined) {
+			env.npm_config_loglevel = options.env.npm_config_loglevel;
+		}
+
+		if (options.env?.npm_config_json !== undefined) {
+			env.npm_config_json = options.env.npm_config_json;
 		}
 
 		const result = spawnSync(process.execPath, ["--import", tsxLoader, npmWrapperScript, ...options.npmArguments], {
@@ -399,11 +409,11 @@ function runCapturedShadow(
 		}
 	}
 
+	deleteMatchingEnvKeys(env, ["npm_config_loglevel", "npm_config_json"]);
+
 	env.npm_config_cache = workspace.cache;
 	delete env.ZNPM_INTERNAL;
 	delete env.ZNPM_DISABLE;
-	delete env.npm_config_loglevel;
-	delete env.npm_config_json;
 
 	if (envOverrides.ZNPM_DISABLE !== undefined) {
 		env.ZNPM_DISABLE = envOverrides.ZNPM_DISABLE;
@@ -429,6 +439,16 @@ function runCapturedShadow(
 	});
 
 	return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+function deleteMatchingEnvKeys(env: NodeJS.ProcessEnv, names: Array<string>): void {
+	const namesToDelete = new Set(names.map((name) => name.toLowerCase()));
+
+	for (const key of Object.keys(env)) {
+		if (namesToDelete.has(key.toLowerCase())) {
+			delete env[key];
+		}
+	}
 }
 
 function converterOutputLinesOf(stderr: string): Array<string> {
