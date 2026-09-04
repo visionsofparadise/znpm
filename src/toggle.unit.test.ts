@@ -153,7 +153,7 @@ describe("changesToReverseOf", () => {
 
 describe("upsertChange", () => {
 	it("leaves changes duplicate-free on repeat enable", () => {
-		const empty: State = { enabled: false, changes: [], npmPath: undefined };
+		const empty: State = { enabled: false, disabled: false, changes: [], npmPath: undefined };
 		const machine: PathChange = { target: "windowsMachinePath", entry: "C:\\znpm\\shim" };
 		const user: PathChange = { target: "windowsUserPath", entry: "C:\\znpm\\bin" };
 		const once = upsertChange(upsertChange(empty, machine), user);

@@ -5,6 +5,7 @@ import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { version as znpmVersion } from "../package.json" with { type: "json" };
+import { writeState } from "./appData";
 import { type ConvertSummary } from "./convert";
 import { candidatePackagesOf, readHiddenLockfile } from "./hiddenLockfile";
 import { cacacheTarballPathOf } from "./npmCache";
@@ -75,6 +76,21 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		});
 	});
 
+	it("execs real npm verbatim when state.json carries disabled", () => {
+		writeFileSync(
+			join(temporaryRoot, "package.json"),
+			`${JSON.stringify({ name: "host", private: true })}\n`,
+			"utf8",
+		);
+		writeState(childAppDirectory(), { enabled: true, disabled: true, changes: [], npmPath: undefined });
+
+		const result = runShadow({ npmArguments: ["install", "left-pad"], env: { npm_config_loglevel: "verbose" } });
+
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({ npmArguments: ["install", "left-pad"], internal: null });
+		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
+	});
+
 	it("passes ordinary commands through verbatim with ZNPM_INTERNAL set", () => {
 		const result = runShadow({ npmArguments: ["install", "left-pad"] });
 		const body = JSON.stringify({ npmArguments: ["install", "left-pad"], internal: "1" }) + "\n";
@@ -140,6 +156,10 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		});
 		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
 	});
+
+	function childAppDirectory(): string {
+		return process.platform === "win32" ? join(localAppData, "znpm") : join(temporaryRoot, ".local", "share", "znpm");
+	}
 
 	function runShadow(options: { npmArguments: Array<string>; env?: NodeJS.ProcessEnv }): {
 		status: number | null;

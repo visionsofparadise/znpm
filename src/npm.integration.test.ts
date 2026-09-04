@@ -106,6 +106,7 @@ describe("resolveNpm on Windows", () => {
 	it("derives node and npm-cli.js from the recorded npm when PATH holds none", () => {
 		writeState(appDirectory, {
 			enabled: true,
+			disabled: false,
 			changes: [],
 			npmPath: join(nodejsDirectory, "npm.cmd"),
 		});
@@ -178,7 +179,7 @@ describe("resolveNpm on POSIX", () => {
 	});
 
 	it("falls back to the recorded npm when PATH holds none", () => {
-		writeState(appDirectory, { enabled: true, changes: [], npmPath: join(npmDirectory, "npm") });
+		writeState(appDirectory, { enabled: true, disabled: false, changes: [], npmPath: join(npmDirectory, "npm") });
 
 		const env = { PATH: pathOf([join(temporaryRoot, "absent")]) };
 

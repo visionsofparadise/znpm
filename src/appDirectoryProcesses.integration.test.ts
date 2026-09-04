@@ -37,7 +37,12 @@ describe("runningAppDirectoryProcessesOf", { timeout: 60_000 }, () => {
 	it("leaves uninstall unchanged while that process is running", async () => {
 		const { appDirectory, child, localAppData, root } = await openHeldProcess();
 
-		writeState(appDirectory, { enabled: true, changes: [], npmPath: "C:\\Program Files\\nodejs\\npm.cmd" });
+		writeState(appDirectory, {
+			enabled: true,
+			disabled: false,
+			changes: [],
+			npmPath: "C:\\Program Files\\nodejs\\npm.cmd",
+		});
 
 		const result = spawnSync(process.execPath, ["--import", tsxLoader, znpmScript, "uninstall"], {
 			encoding: "utf8",

@@ -10,6 +10,7 @@ export type PathChange =
 
 export interface State {
 	enabled: boolean;
+	disabled: boolean;
 	changes: Array<PathChange>;
 	npmPath: string | undefined;
 }
@@ -38,7 +39,7 @@ export function readState(appDirectory: string): State {
 	const statePath = statePathOf(appDirectory);
 
 	if (!existsSync(statePath)) {
-		return { enabled: false, changes: [], npmPath: undefined };
+		return { enabled: false, disabled: false, changes: [], npmPath: undefined };
 	}
 
 	const parsed: unknown = JSON.parse(readFileSync(statePath, "utf8"));
@@ -77,11 +78,20 @@ function stateOf(value: unknown): State {
 		throw new Error("znpm state.json is malformed");
 	}
 
-	const { npmPath } = value;
+	const { disabled, npmPath } = value;
+
+	if (disabled !== undefined && typeof disabled !== "boolean") {
+		throw new Error("znpm state.json is malformed");
+	}
 
 	if (npmPath !== undefined && typeof npmPath !== "string") {
 		throw new Error("znpm state.json is malformed");
 	}
 
-	return { enabled: value.enabled, changes: value.changes.map(pathChangeOf), npmPath };
+	return {
+		enabled: value.enabled,
+		disabled: disabled ?? false,
+		changes: value.changes.map(pathChangeOf),
+		npmPath,
+	};
 }

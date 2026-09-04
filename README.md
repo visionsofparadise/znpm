@@ -56,6 +56,8 @@ Removes znpm from the device entirely. Your projects keep working here too.
 
 To run a single command on plain npm, set `ZNPM_DISABLE=1` in the environment or pass `--znpm-disable` on the command.
 
+Setting `"disabled": true` in znpm's `state.json` — `%LOCALAPPDATA%\znpm\state.json` on Windows, `~/.local/share/znpm/state.json` elsewhere — does the same for every command until it is set back, and `znpm enable` and `znpm disable` leave that key alone.
+
 You can ignore packages by listing them in your `package.json`:
 
 ```json

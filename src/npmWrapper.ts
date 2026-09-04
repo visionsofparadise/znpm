@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { finishWorkers } from "@pnpm/worker";
 import { version as znpmVersion } from "../package.json" with { type: "json" };
-import { appDirectoryOf } from "./appData";
+import { appDirectoryOf, readState } from "./appData";
 import { convert } from "./convert";
 import { isNpmVersionQuery } from "./isNpmVersionQuery";
 import { isTreeMutatingNpmCommand } from "./isTreeMutatingNpmCommand";
@@ -22,7 +22,8 @@ await runCli(main);
 
 async function main(): Promise<void> {
 	const npmArguments = userArgumentsOf(process.argv, import.meta.url);
-	const npm = resolveNpm(process.env, appDirectoryOf(process.platform));
+	const appDirectory = appDirectoryOf(process.platform);
+	const npm = resolveNpm(process.env, appDirectory);
 
 	if (process.env.ZNPM_INTERNAL !== undefined) {
 		exitWithNpm(npm, npmArguments, process.env);
@@ -38,6 +39,10 @@ async function main(): Promise<void> {
 			npmArguments.filter((argument) => argument !== "--znpm-disable"),
 			process.env,
 		);
+	}
+
+	if (readState(appDirectory).disabled) {
+		exitWithNpm(npm, npmArguments, process.env);
 	}
 
 	if (!isTreeMutatingNpmCommand(npmArguments)) {

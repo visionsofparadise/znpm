@@ -16,12 +16,39 @@ describe("the state file", () => {
 	});
 
 	it("reads a disabled state with no changes when state.json is absent", () => {
-		expect(readState(temporaryRoot)).toEqual({ enabled: false, changes: [], npmPath: undefined });
+		expect(readState(temporaryRoot)).toEqual({ enabled: false, disabled: false, changes: [], npmPath: undefined });
+	});
+
+	it("reads an absent disabled key as false", () => {
+		writeFileSync(join(temporaryRoot, "state.json"), JSON.stringify({ enabled: true, changes: [] }), "utf8");
+
+		expect(readState(temporaryRoot).disabled).toBe(false);
+	});
+
+	it("reads a recorded disabled override", () => {
+		writeFileSync(
+			join(temporaryRoot, "state.json"),
+			JSON.stringify({ enabled: true, disabled: true, changes: [] }),
+			"utf8",
+		);
+
+		expect(readState(temporaryRoot).disabled).toBe(true);
+	});
+
+	it("refuses a disabled key that is not a boolean", () => {
+		writeFileSync(
+			join(temporaryRoot, "state.json"),
+			JSON.stringify({ enabled: true, disabled: "yes", changes: [] }),
+			"utf8",
+		);
+
+		expect(() => readState(temporaryRoot)).toThrow();
 	});
 
 	it("reads every recorded change alongside the resolved npm", () => {
 		const recorded = {
 			enabled: true,
+			disabled: false,
 			changes: [
 				{ target: "windowsMachinePath", entry: "C:\\znpm\\shim" },
 				{ target: "windowsUserPath", entry: "C:\\znpm\\bin" },
@@ -46,7 +73,7 @@ describe("the state file", () => {
 	it("creates the app directory and records the state as JSON", () => {
 		const appDirectory = join(temporaryRoot, "znpm");
 		const changes: Array<PathChange> = [{ target: "posixSymlink", path: "/usr/local/bin/znpm" }];
-		const state: State = { enabled: true, changes, npmPath: "/usr/local/lib/node/npm" };
+		const state: State = { enabled: true, disabled: false, changes, npmPath: "/usr/local/lib/node/npm" };
 
 		writeState(appDirectory, state);
 
