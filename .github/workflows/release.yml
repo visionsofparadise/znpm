@@ -152,3 +152,50 @@ jobs:
          - run: gh release edit "$GITHUB_REF_NAME" --draft=false
            env:
               GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+   publish:
+      needs: release
+      runs-on: ubuntu-latest
+      timeout-minutes: 20
+      permissions:
+         id-token: write
+         contents: read
+      steps:
+         - uses: actions/checkout@v4
+
+         - uses: actions/setup-node@v4
+           with:
+              node-version: "24"
+              registry-url: "https://registry.npmjs.org"
+
+         - run: npm install -g npm@12
+
+         - uses: actions/download-artifact@v4
+           with:
+              pattern: dist-*
+              merge-multiple: true
+              path: dist/
+
+         - run: chmod +x dist/*
+
+         - id: check
+           run: |
+              VERSION=$(node -p "require('./package.json').version")
+              PUBLISHED=$(npm view "@zcross/znpm@$VERSION" version 2>/dev/null || echo "")
+              if [ "$PUBLISHED" = "$VERSION" ]; then
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "skip=false" >> "$GITHUB_OUTPUT"
+              fi
+
+         - if: steps.check.outputs.skip == 'false'
+           run: node scripts/packageNpm.mjs
+
+         - if: steps.check.outputs.skip == 'false'
+           run: |
+              for directory in dist/npm/znpm-*; do
+                npm publish --access public "$directory"
+              done
+
+         - if: steps.check.outputs.skip == 'false'
+           run: npm publish --access public dist/npm/znpm
