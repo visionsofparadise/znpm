@@ -32,30 +32,72 @@ case "$machine" in
 		;;
 esac
 
-target="$os-$arch"
+libc=""
+
+if [ "$os" = "linux" ]; then
+	if ldd --version 2>&1 | grep -qi musl; then
+		libc="-musl"
+	else
+		for loader in /lib/ld-musl-*; do
+			if [ -f "$loader" ]; then
+				libc="-musl"
+			fi
+			break
+		done
+	fi
+fi
+
+target="$os-$arch$libc"
 
 if [ "$os" = "windows" ]; then
 	exe=".exe"
+else
+	exe=""
+fi
+
+posix_path() {
+	if command -v cygpath >/dev/null 2>&1; then
+		cygpath -u "$1"
+	else
+		printf '%s\n' "$1"
+	fi
+}
+
+windows_path() {
+	if command -v cygpath >/dev/null 2>&1; then
+		cygpath -w "$1"
+	else
+		printf '%s\n' "$1" | sed -e 's|^/c/|C:/|' -e 's|^/d/|D:/|' -e 's|/|\\|g'
+	fi
+}
+
+single_quote() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+if [ -n "${ZNPM_HOME:-}" ]; then
+	if [ "$os" = "windows" ]; then
+		app_directory="$(posix_path "$ZNPM_HOME")"
+	else
+		app_directory="$ZNPM_HOME"
+	fi
+elif [ "$os" = "windows" ]; then
 	if [ -n "${LOCALAPPDATA:-}" ]; then
 		windows_home="$LOCALAPPDATA"
 	elif [ -n "${HOME:-}" ]; then
 		windows_home="$HOME/AppData/Local"
 	else
-		step "znpm requires LOCALAPPDATA or HOME."
+		step "znpm requires ZNPM_HOME, LOCALAPPDATA, or HOME."
 		exit 1
 	fi
-	if command -v cygpath >/dev/null 2>&1; then
-		app_directory="$(cygpath -u "$windows_home")/znpm"
-	else
-		app_directory="$windows_home/znpm"
-	fi
-else
-	exe=""
-	if [ -z "${HOME:-}" ]; then
-		step "znpm requires HOME."
-		exit 1
-	fi
+	app_directory="$(posix_path "$windows_home")/znpm"
+elif [ -n "${XDG_DATA_HOME:-}" ]; then
+	app_directory="$XDG_DATA_HOME/znpm"
+elif [ -n "${HOME:-}" ]; then
 	app_directory="$HOME/.local/share/znpm"
+else
+	step "znpm requires ZNPM_HOME, XDG_DATA_HOME, or HOME."
+	exit 1
 fi
 
 bin_directory="$app_directory/bin"
@@ -66,14 +108,6 @@ znpm_path="$bin_directory/znpm$exe"
 npm_wrapper_path="$npm_wrapper_directory/npm$exe"
 
 step "installing $target into $app_directory"
-
-windows_path() {
-	if command -v cygpath >/dev/null 2>&1; then
-		cygpath -w "$1"
-	else
-		printf '%s\n' "$1" | sed -e 's|^/c/|C:/|' -e 's|^/d/|D:/|' -e 's|/|\\|g'
-	fi
-}
 
 fetch() {
 	if command -v curl >/dev/null 2>&1; then
@@ -98,11 +132,64 @@ verify() {
 	fi
 }
 
-privileged() {
-	if [ -w /usr/local/bin ]; then
-		"$@"
-	else
-		sudo "$@"
+write_env_files() {
+	{
+		printf 'znpm_home=%s\n' "$(single_quote "$app_directory")"
+		cat <<'ENV_BODY'
+case ":$PATH:" in
+	*":$znpm_home/npm-wrapper:"*) ;;
+	*) export PATH="$znpm_home/npm-wrapper:$znpm_home/bin:$PATH" ;;
+esac
+unset znpm_home
+ENV_BODY
+	} >"$app_directory/env"
+
+	{
+		printf 'set -l znpm_home %s\n' "$(single_quote "$app_directory")"
+		cat <<'FISH_BODY'
+if not contains "$znpm_home/npm-wrapper" $PATH
+	set -gx PATH "$znpm_home/npm-wrapper" "$znpm_home/bin" $PATH
+end
+FISH_BODY
+	} >"$app_directory/env.fish"
+}
+
+add_startup_line() {
+	startup_file="$1"
+
+	if [ ! -f "$startup_file" ]; then
+		if [ "$2" != "create" ]; then
+			return 0
+		fi
+
+		: >"$startup_file"
+	fi
+
+	if grep -qxF "$startup_line" "$startup_file"; then
+		return 0
+	fi
+
+	if [ -n "$(tail -c 1 "$startup_file")" ]; then
+		printf '\n' >>"$startup_file"
+	fi
+
+	printf '%s\n' "$startup_line" >>"$startup_file"
+}
+
+expose_posix() {
+	write_env_files
+
+	startup_line=". $(single_quote "$app_directory/env")"
+
+	add_startup_line "$HOME/.profile" create
+	add_startup_line "$HOME/.bashrc" create
+	add_startup_line "$HOME/.zshrc" create
+	add_startup_line "$HOME/.bash_profile" skip
+	add_startup_line "$HOME/.zprofile" skip
+
+	if [ -d "$HOME/.config/fish" ]; then
+		mkdir -p "$HOME/.config/fish/conf.d"
+		cp "$app_directory/env.fish" "$HOME/.config/fish/conf.d/znpm.fish"
 	fi
 }
 
@@ -147,9 +234,7 @@ EOF
 }
 
 if [ -n "$dist_directory" ]; then
-	if command -v cygpath >/dev/null 2>&1; then
-		dist_directory="$(cygpath -u "$dist_directory")"
-	fi
+	dist_directory="$(posix_path "$dist_directory")"
 	dist_directory="$(cd "$dist_directory" && pwd)"
 fi
 
@@ -198,31 +283,13 @@ if [ "$os" = "windows" ]; then
 	step "prepending $bin_directory to the user PATH"
 	add_windows_user_path "$bin_directory"
 else
-	link_path="/usr/local/bin/znpm"
-	if [ -L "$link_path" ]; then
-		privileged rm -f "$link_path"
-	elif [ -e "$link_path" ]; then
-		step "znpm found $link_path that it did not create."
-		exit 1
-	fi
-	step "linking $link_path -> $znpm_path"
-	privileged mkdir -p /usr/local/bin
-	privileged ln -s "$znpm_path" "$link_path"
+	step "writing $app_directory/env and the shell startup lines"
+	expose_posix
 fi
 
 step "installed"
 
-"$znpm_path" enable >&2
-
-if [ "$os" = "windows" ]; then
-	if command -v cygpath >/dev/null 2>&1; then
-		path_prefix="$(cygpath -u "$npm_wrapper_directory"):$(cygpath -u "$bin_directory")"
-	else
-		path_prefix="$npm_wrapper_directory:$bin_directory"
-	fi
-else
-	path_prefix="/usr/local/bin"
-fi
+path_prefix="$npm_wrapper_directory:$bin_directory"
 
 export PATH="$path_prefix:$PATH"
 hash -r 2>/dev/null || true
@@ -230,4 +297,4 @@ hash -r 2>/dev/null || true
 printf 'export PATH="%s:$PATH"\n' "$path_prefix"
 printf '%s\n' 'hash -r 2>/dev/null || true'
 
-
+step "run: znpm enable"

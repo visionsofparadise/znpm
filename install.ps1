@@ -26,7 +26,13 @@ function Get-InstallTarget {
 	}
 
 	if ($IsLinux) {
-		return "linux-$arch"
+		$libc = ""
+
+		if (Get-ChildItem -Path "/lib" -Filter "ld-musl-*" -File -ErrorAction SilentlyContinue) {
+			$libc = "-musl"
+		}
+
+		return "linux-$arch$libc"
 	}
 
 	if ($IsMacOS) {
@@ -48,6 +54,95 @@ function Get-ExpectedChecksum {
 	}
 
 	throw "znpm found no SHA256SUMS entry for $Asset"
+}
+
+function Get-PosixSingleQuote {
+	param([string]$Value)
+
+	return "'" + $Value.Replace("'", "'\''") + "'"
+}
+
+function Get-PosixEnvScript {
+	param([string]$AppDirectory)
+
+	$body = @'
+case ":$PATH:" in
+	*":$znpm_home/npm-wrapper:"*) ;;
+	*) export PATH="$znpm_home/npm-wrapper:$znpm_home/bin:$PATH" ;;
+esac
+unset znpm_home
+'@
+
+	return "znpm_home=" + (Get-PosixSingleQuote -Value $AppDirectory) + "`n" + ($body -replace "`r`n", "`n") + "`n"
+}
+
+function Get-PosixFishEnvScript {
+	param([string]$AppDirectory)
+
+	$body = @'
+if not contains "$znpm_home/npm-wrapper" $PATH
+	set -gx PATH "$znpm_home/npm-wrapper" "$znpm_home/bin" $PATH
+end
+'@
+
+	return "set -l znpm_home " + (Get-PosixSingleQuote -Value $AppDirectory) + "`n" + ($body -replace "`r`n", "`n") + "`n"
+}
+
+function Get-StartupSourceLine {
+	param([string]$AppDirectory)
+
+	return ". " + (Get-PosixSingleQuote -Value (Join-Path $AppDirectory "env"))
+}
+
+function Add-StartupLine {
+	param([string]$Path, [string]$Line, [bool]$CreateIfAbsent)
+
+	$present = Test-Path -LiteralPath $Path
+
+	if (-not $present -and -not $CreateIfAbsent) {
+		return
+	}
+
+	$content = if ($present) { [IO.File]::ReadAllText($Path) } else { "" }
+
+	foreach ($existing in ($content -split "`n")) {
+		if (($existing -replace "`r$", "") -eq $Line) {
+			return
+		}
+	}
+
+	$separator = if ($content -ne "" -and -not $content.EndsWith("`n")) { "`n" } else { "" }
+
+	[IO.File]::WriteAllText($Path, $content + $separator + $Line + "`n")
+}
+
+function Install-PosixExposure {
+	param([string]$AppDirectory)
+
+	[IO.File]::WriteAllText((Join-Path $AppDirectory "env"), (Get-PosixEnvScript -AppDirectory $AppDirectory))
+	[IO.File]::WriteAllText((Join-Path $AppDirectory "env.fish"), (Get-PosixFishEnvScript -AppDirectory $AppDirectory))
+
+	$line = Get-StartupSourceLine -AppDirectory $AppDirectory
+
+	Add-StartupLine -Path (Join-Path $HOME ".profile") -Line $line -CreateIfAbsent $true
+	Add-StartupLine -Path (Join-Path $HOME ".bashrc") -Line $line -CreateIfAbsent $true
+	Add-StartupLine -Path (Join-Path $HOME ".zshrc") -Line $line -CreateIfAbsent $true
+	Add-StartupLine -Path (Join-Path $HOME ".bash_profile") -Line $line -CreateIfAbsent $false
+	Add-StartupLine -Path (Join-Path $HOME ".zprofile") -Line $line -CreateIfAbsent $false
+
+	$fishDirectory = Join-Path (Join-Path $HOME ".config") "fish"
+
+	if (-not (Test-Path -LiteralPath $fishDirectory)) {
+		return
+	}
+
+	$fishConfigurationDirectory = Join-Path $fishDirectory "conf.d"
+
+	New-Item -ItemType Directory -Path $fishConfigurationDirectory -Force | Out-Null
+	[IO.File]::WriteAllText(
+		(Join-Path $fishConfigurationDirectory "znpm.fish"),
+		(Get-PosixFishEnvScript -AppDirectory $AppDirectory)
+	)
 }
 
 function Add-UserPathEntry {
@@ -104,33 +199,15 @@ public static class EnvironmentNative {
 	[EnvironmentNative]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result) | Out-Null
 }
 
-function Install-PosixZnpmLink {
-	param([string]$ZnpmPath)
-
-	$linkPath = "/usr/local/bin/znpm"
-
-	& sudo mkdir -p /usr/local/bin
-
-	if (Test-Path -LiteralPath $linkPath) {
-		$existing = Get-Item -LiteralPath $linkPath
-
-		if ($existing.LinkType -ne "SymbolicLink") {
-			throw "znpm found $linkPath that it did not create"
-		}
-
-		& sudo rm -f $linkPath
-	}
-
-	& sudo ln -s $ZnpmPath $linkPath
-}
-
 Write-Step "installing..."
 
 $target = Get-InstallTarget
 $windows = $target.StartsWith("windows-")
 $exe = if ($windows) { ".exe" } else { "" }
 
-if ($windows) {
+if (-not [string]::IsNullOrEmpty($env:ZNPM_HOME)) {
+	$appDirectory = [IO.Path]::GetFullPath($env:ZNPM_HOME)
+} elseif ($windows) {
 	$localAppData = $env:LOCALAPPDATA
 
 	if ([string]::IsNullOrEmpty($localAppData)) {
@@ -138,12 +215,12 @@ if ($windows) {
 	}
 
 	$appDirectory = Join-Path $localAppData "znpm"
-} else {
-	if ([string]::IsNullOrEmpty($HOME)) {
-		throw "znpm requires HOME"
-	}
-
+} elseif (-not [string]::IsNullOrEmpty($env:XDG_DATA_HOME)) {
+	$appDirectory = Join-Path $env:XDG_DATA_HOME "znpm"
+} elseif (-not [string]::IsNullOrEmpty($HOME)) {
 	$appDirectory = Join-Path $HOME ".local/share/znpm"
+} else {
+	throw "znpm requires ZNPM_HOME, XDG_DATA_HOME, or HOME"
 }
 
 $binDirectory = Join-Path $appDirectory "bin"
@@ -222,26 +299,17 @@ if ($windows) {
 	Write-Step "prepending $binDirectory to the user PATH"
 	Add-UserPathEntry -Entry $binDirectory
 } else {
-	Write-Step "linking /usr/local/bin/znpm -> $znpmPath"
-	Install-PosixZnpmLink -ZnpmPath $znpmPath
+	Write-Step "writing $appDirectory/env and the shell startup lines"
+	Install-PosixExposure -AppDirectory $appDirectory
 }
 
 Write-Step "installed"
 
-& $znpmPath enable
+Write-Step "prepending $npmWrapperDirectory and $binDirectory to this process PATH"
+$env:PATH = $npmWrapperDirectory + [IO.Path]::PathSeparator + $binDirectory + [IO.Path]::PathSeparator + $env:PATH
 
-if ($LASTEXITCODE -ne 0) {
-	throw "znpm enable exited with $LASTEXITCODE"
+if ($windows -and (Test-Path Alias:npm)) {
+	Remove-Item Alias:npm -Force
 }
 
-if ($windows) {
-	Write-Step "prepending $npmWrapperDirectory and $binDirectory to this process PATH"
-	$env:Path = "$npmWrapperDirectory;$binDirectory;$env:Path"
-
-	if (Test-Path Alias:npm) {
-		Remove-Item Alias:npm -Force
-	}
-} else {
-	Write-Step "prepending /usr/local/bin to this process PATH"
-	$env:PATH = "/usr/local/bin:$env:PATH"
-}
+Write-Step "run: znpm enable"
