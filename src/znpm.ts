@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
 	chmodSync,
@@ -8,8 +8,6 @@ import {
 	mkdirSync,
 	readFileSync,
 	readlinkSync,
-	renameSync,
-	rmSync,
 	statSync,
 	unlinkSync,
 	writeFileSync,
@@ -28,8 +26,9 @@ import {
 	type PathChange,
 } from "./appData";
 import { runningAppDirectoryProcessesOf, uninstallBusyMessageOf } from "./appDirectoryProcessesOf";
+import { displaceRunningExecutable, isDisplacementRequired, removeAppDirectory } from "./appDirectoryRemoval";
 import { ensureExposure, isNpmPackageExecutable, removeExposure } from "./exposure";
-import { applyMachinePathElevated, trailingScriptLinesOf } from "./machinePath";
+import { applyMachinePathElevated } from "./machinePath";
 import { npmPathOf, resolveNpm } from "./npm";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { pruneStoreDirectories } from "./prune";
@@ -43,9 +42,7 @@ import {
 	removePathEntry,
 	removePathEntryIgnoringCase,
 } from "./toggle";
-import { isPathUnder } from "./utils/isPathUnder";
 import { isRecord } from "./utils/isRecord";
-import { powershellSingleQuote } from "./utils/powershellSingleQuote";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
@@ -203,25 +200,32 @@ function uninstall(): void {
 	log("removing the PATH exposure");
 	removeExposure(appDirectory, process.env);
 
-	if (process.platform === "win32") {
-		log(`removing ${appDirectory}`);
+	if (isDisplacementRequired(process.execPath, appDirectory, process.platform)) {
+		const displacedPath = displaceRunningExecutable(process.execPath, tmpdir(), process.pid);
 
-		if (!removeWindowsAppDirectory(appDirectory) || npmRemoval !== undefined) {
-			scheduleWindowsAppDirectoryRemoval(appDirectory, npmRemoval);
-		}
-
-		return;
+		log(`moved this executable to ${displacedPath}`);
 	}
 
 	log(`removing ${appDirectory}`);
-	rmSync(appDirectory, { recursive: true, force: true });
+	removeAppDirectory(appDirectory);
 
 	if (npmRemoval !== undefined) {
 		log(`removing @zcross/znpm with ${npmRemoval.command}`);
-		spawnSync(npmRemoval.command, npmRemoval.args, {
+
+		const result = spawnSync(npmRemoval.command, npmRemoval.args, {
 			stdio: "inherit",
 			env: { ...process.env, ZNPM_DISABLE: "1" },
 		});
+
+		if (result.error !== undefined) {
+			throw new Error(`znpm could not run ${npmRemoval.command} to remove @zcross/znpm`, { cause: result.error });
+		}
+
+		if (result.status !== 0) {
+			throw new Error(
+				`znpm left @zcross/znpm installed: ${npmRemoval.command} exited ${String(result.status)}; run npm rm -g @zcross/znpm by hand`,
+			);
+		}
 	}
 }
 
@@ -307,62 +311,6 @@ function applyMachinePath(insert: string | undefined, remove: string | undefined
 	}
 
 	throw new Error("znpm apply-machine-path requires --insert <dir> or --remove <dir>");
-}
-
-function removeWindowsAppDirectory(appDirectory: string): boolean {
-	try {
-		if (isPathUnder(process.execPath, appDirectory)) {
-			displaceRunningExecutable(appDirectory);
-		}
-
-		rmSync(appDirectory, { recursive: true, force: true });
-	} catch {
-		return false;
-	}
-
-	return true;
-}
-
-function displaceRunningExecutable(appDirectory: string): void {
-	const displacedName = `znpm-uninstalled-${String(process.pid)}.exe`;
-
-	try {
-		renameSync(process.execPath, join(tmpdir(), displacedName));
-	} catch {
-		renameSync(process.execPath, join(dirname(appDirectory), displacedName));
-	}
-}
-
-function scheduleWindowsAppDirectoryRemoval(
-	appDirectory: string,
-	trailing: { command: string; args: Array<string> } | undefined,
-): void {
-	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.ps1`);
-	const script = [
-		"$ErrorActionPreference = 'SilentlyContinue'",
-		`$target = ${powershellSingleQuote(appDirectory)}`,
-		"for ($i = 0; $i -lt 30; $i++) {",
-		"  Start-Sleep -Seconds 1",
-		"  if (-not (Test-Path -LiteralPath $target)) { break }",
-		"  Remove-Item -LiteralPath $target -Recurse -Force",
-		"}",
-		...trailingScriptLinesOf(trailing),
-		"Remove-Item -LiteralPath $PSCommandPath -Force",
-		"",
-	].join("\r\n");
-
-	writeFileSync(scriptPath, script, "utf8");
-
-	const child = spawn(
-		"powershell.exe",
-		["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
-		{
-			stdio: "ignore",
-			windowsHide: true,
-		},
-	);
-
-	child.unref();
 }
 
 function runWithStatus(inProgress: string, complete: string, work: () => void): void {

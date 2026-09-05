@@ -51,11 +51,11 @@ export function isAppDirectoryProcessPath(
 	}
 
 	try {
-		const resolvedExecutable = realpathSync(executablePath);
+		const resolvedExecutable = realpathSync.native(executablePath);
 		let resolvedApp = appDirectory;
 
 		try {
-			resolvedApp = realpathSync(appDirectory);
+			resolvedApp = realpathSync.native(appDirectory);
 		} catch {
 			resolvedApp = appDirectory;
 		}

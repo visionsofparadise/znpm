@@ -179,11 +179,17 @@ fetch() {
 }
 
 verify() {
+	grep -E "[[:space:]][*]?($znpm_asset|$npm_wrapper_asset)\$" SHA256SUMS >SHA256SUMS.selected || true
+
+	if [ "$(wc -l <SHA256SUMS.selected)" -ne 2 ]; then
+		step "znpm found no SHA256SUMS lines for $znpm_asset and $npm_wrapper_asset."
+		exit 1
+	fi
+
 	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum -c --status --ignore-missing SHA256SUMS
+		sha256sum -c SHA256SUMS.selected >&2
 	elif command -v shasum >/dev/null 2>&1; then
-		grep -E "[[:space:]][*]?($znpm_asset|$npm_wrapper_asset)\$" SHA256SUMS >SHA256SUMS.selected
-		shasum -a 256 -c --status SHA256SUMS.selected
+		shasum -a 256 -c SHA256SUMS.selected >&2
 	else
 		step "znpm requires sha256sum or shasum."
 		exit 1

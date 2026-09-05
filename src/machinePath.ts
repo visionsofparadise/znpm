@@ -27,16 +27,6 @@ export function powershellStringArray(values: Array<string>): string {
 	return `@(${values.map((value) => powershellSingleQuote(quotedProcessArgumentOf(value))).join(",")})`;
 }
 
-export function trailingScriptLinesOf(trailing: { command: string; args: Array<string> } | undefined): Array<string> {
-	if (trailing === undefined) {
-		return [];
-	}
-
-	const quoted = [trailing.command, ...trailing.args].map((value) => powershellSingleQuote(value));
-
-	return ["$env:ZNPM_DISABLE = '1'", `& ${quoted.join(" ")}`];
-}
-
 function reinvocationOf(commandArguments: Array<string>): { filePath: string; argumentList: Array<string> } {
 	const filePath = process.execPath;
 	const scriptPath = process.argv[1];

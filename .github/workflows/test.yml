@@ -63,12 +63,15 @@ jobs:
                - image: node:24-bookworm-slim
                  user: root
                  home: /root
+                 fetcher: absent
                - image: node:24-alpine
                  user: root
                  home: /root
+                 fetcher: present
                - image: node:24-bookworm
                  user: node
                  home: /home/node
+                 fetcher: present
       steps:
          - uses: actions/checkout@v4
 
@@ -80,3 +83,42 @@ jobs:
          - run: chmod +x dist/*
 
          - run: docker run --rm --user ${{ matrix.user }} -e HOME=${{ matrix.home }} -v "$PWD:/repo:ro" ${{ matrix.image }} sh /repo/scripts/installSmoke.sh /repo/dist
+
+         - run: docker network create znpm-dist-net
+
+         - run: sha256sum znpm-* npm-wrapper-* > SHA256SUMS
+           working-directory: dist
+
+         - run: docker run --rm --detach --name znpm-dist --network znpm-dist-net -v "$PWD/dist:/www:ro" busybox httpd -f -p 8000 -h /www
+
+         - run: |
+              set -eu
+              log="$RUNNER_TEMP/install-download.log"
+              status=0
+              docker run --rm --network znpm-dist-net --user ${{ matrix.user }} -e HOME=${{ matrix.home }} -e ZNPM_HOME=/tmp/znpm-download -e ZNPM_BASE_URL=http://znpm-dist:8000 -v "$PWD:/repo:ro" ${{ matrix.image }} sh -c 'sh /repo/scripts/install.sh >/dev/null && exec /tmp/znpm-download/bin/znpm disable' >"$log" 2>&1 || status=$?
+              cat "$log"
+              if ! grep -qF 'downloading SHA256SUMS' "$log"; then
+                 echo "install.sh took no download path with ZNPM_DIST unset" >&2
+                 exit 1
+              fi
+              case "${{ matrix.fetcher }}" in
+                 absent)
+                    if [ "$status" -eq 0 ]; then
+                       echo "install.sh reported success on an image carrying no fetcher" >&2
+                       exit 1
+                    fi
+                    grep -qF 'znpm requires curl or wget.' "$log"
+                    ;;
+                 present)
+                    if [ "$status" -ne 0 ]; then
+                       echo "the downloaded install exited $status on an image that carries a fetcher" >&2
+                       exit 1
+                    fi
+                    grep -qF 'verifying checksums' "$log"
+                    grep -qE '^znpm-linux-(x64|arm64)(-musl)?: OK$' "$log"
+                    ;;
+                 *)
+                    echo "the matrix row declares no fetcher" >&2
+                    exit 1
+                    ;;
+              esac

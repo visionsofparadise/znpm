@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,6 +37,26 @@ describe("isAppDirectoryProcessPath", () => {
 		expect(isAppDirectoryProcessPath(`${appDirectory}/bin/znpm`, appDirectory, "linux")).toBe(true);
 		expect(isAppDirectoryProcessPath(`${appDirectory}/npm-wrapper`, appDirectory, "linux")).toBe(true);
 		expect(isAppDirectoryProcessPath("/home/matt/.local/share/ZNPM/bin/znpm", appDirectory, "linux")).toBe(false);
+	});
+
+	it.runIf(process.platform === "win32")("matches an executable under an 8.3 spelling of the app directory", () => {
+		const root = mkdtempSync(join(tmpdir(), "znpm-short-"));
+		const appDirectory = join(root, "app-directory-long-name");
+		const executablePath = join(appDirectory, "bin", "znpm.exe");
+
+		try {
+			mkdirSync(join(appDirectory, "bin"), { recursive: true });
+			writeFileSync(executablePath, "");
+
+			const shortAppDirectory = execSync(`for %I in ("${appDirectory}") do @echo %~sI`, {
+				encoding: "utf8",
+			}).trim();
+
+			expect(shortAppDirectory).not.toBe(appDirectory);
+			expect(isAppDirectoryProcessPath(executablePath, shortAppDirectory, "win32")).toBe(true);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it.skipIf(process.platform === "win32")("matches a symlink whose realpath is inside the app directory", () => {

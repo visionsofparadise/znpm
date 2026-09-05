@@ -82,18 +82,22 @@ function Get-StateFingerprint {
 	return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
-function Wait-AppDirectoryRemoval {
-	param([string]$Path)
+function Get-UninstallResidue {
+	param([string]$Directory, [string[]]$Before)
 
-	$deadline = (Get-Date).AddSeconds(60)
-
-	while ((Test-Path -LiteralPath $Path) -and (Get-Date) -lt $deadline) {
-		Start-Sleep -Milliseconds 500
-	}
+	return @(
+		Get-ChildItem -LiteralPath $Directory -Filter "znpm-uninstall*" -Force -ErrorAction SilentlyContinue |
+			Where-Object { $Before -notcontains $_.Name }
+	)
 }
 
 $scriptDirectory = Split-Path -Parent $PSCommandPath
 $distDirectory = (Resolve-Path -LiteralPath $Dist).Path
+$temporaryDirectory = [IO.Path]::GetTempPath()
+$residueBefore = @(
+	Get-ChildItem -LiteralPath $temporaryDirectory -Filter "znpm-uninstall*" -Force -ErrorAction SilentlyContinue |
+		Select-Object -ExpandProperty Name
+)
 $smokeRoot = Join-Path ([IO.Path]::GetTempPath()) ("znpm-smoke-" + [Guid]::NewGuid().ToString("n"))
 $fixtureDirectory = Join-Path $smokeRoot "fixture"
 $appDirectory = Join-Path $smokeRoot "znpm"
@@ -222,10 +226,8 @@ try {
 		Stop-Smoke "znpm uninstall exited with $LASTEXITCODE"
 	}
 
-	Wait-AppDirectoryRemoval -Path $appDirectory
-
 	if (Test-Path -LiteralPath $appDirectory) {
-		Stop-Smoke "znpm uninstall left $appDirectory after 60 seconds"
+		Stop-Smoke "znpm uninstall exited 0 and left $appDirectory standing"
 	}
 
 	if (Test-PathValueUnder -PathValue (Get-RegistryPathValue -Scope "machine") -Directory $appDirectory) {
@@ -241,6 +243,14 @@ try {
 	if ($localStateAfter -ne $localStateBefore) {
 		Stop-Smoke "the run changed $localStatePath"
 	}
+
+	$residue = @(Get-UninstallResidue -Directory $temporaryDirectory -Before $residueBefore | Select-Object -ExpandProperty Name)
+
+	if ($residue.Count -ne 1 -or $residue[0] -notlike "znpm-uninstalled-*.exe") {
+		Stop-Smoke "znpm uninstall left [$($residue -join ', ')] in $temporaryDirectory; the displaced executable is the only residue it may leave"
+	}
+
+	Write-Step "the only residue is $($residue[0])"
 
 	Write-Step "install smoke passed"
 } catch {
@@ -259,11 +269,13 @@ try {
 		} catch {
 			[Console]::Error.WriteLine("cleanup: znpm uninstall failed: $($_.Exception.Message)")
 		}
-
-		Wait-AppDirectoryRemoval -Path $appDirectory
 	}
 
 	Remove-Item -LiteralPath $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue
+
+	foreach ($leftover in (Get-UninstallResidue -Directory $temporaryDirectory -Before $residueBefore)) {
+		Remove-Item -LiteralPath $leftover.FullName -Force -ErrorAction SilentlyContinue
+	}
 
 	foreach ($scope in @("machine", "user")) {
 		if (Test-PathValueUnder -PathValue (Get-RegistryPathValue -Scope $scope) -Directory $appDirectory) {
