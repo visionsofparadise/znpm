@@ -8,6 +8,7 @@ import {
 	mkdirSync,
 	readFileSync,
 	readlinkSync,
+	renameSync,
 	rmSync,
 	statSync,
 	unlinkSync,
@@ -42,6 +43,7 @@ import {
 	removePathEntry,
 	removePathEntryIgnoringCase,
 } from "./toggle";
+import { isPathUnder } from "./utils/isPathUnder";
 import { isRecord } from "./utils/isRecord";
 import { powershellSingleQuote } from "./utils/powershellSingleQuote";
 import { runCli } from "./utils/runCli";
@@ -203,7 +205,10 @@ function uninstall(): void {
 
 	if (process.platform === "win32") {
 		log(`removing ${appDirectory}`);
-		scheduleWindowsAppDirectoryRemoval(appDirectory, npmRemoval);
+
+		if (!removeWindowsAppDirectory(appDirectory) || npmRemoval !== undefined) {
+			scheduleWindowsAppDirectoryRemoval(appDirectory, npmRemoval);
+		}
 
 		return;
 	}
@@ -302,6 +307,30 @@ function applyMachinePath(insert: string | undefined, remove: string | undefined
 	}
 
 	throw new Error("znpm apply-machine-path requires --insert <dir> or --remove <dir>");
+}
+
+function removeWindowsAppDirectory(appDirectory: string): boolean {
+	try {
+		if (isPathUnder(process.execPath, appDirectory)) {
+			displaceRunningExecutable(appDirectory);
+		}
+
+		rmSync(appDirectory, { recursive: true, force: true });
+	} catch {
+		return false;
+	}
+
+	return true;
+}
+
+function displaceRunningExecutable(appDirectory: string): void {
+	const displacedName = `znpm-uninstalled-${String(process.pid)}.exe`;
+
+	try {
+		renameSync(process.execPath, join(tmpdir(), displacedName));
+	} catch {
+		renameSync(process.execPath, join(dirname(appDirectory), displacedName));
+	}
 }
 
 function scheduleWindowsAppDirectoryRemoval(
