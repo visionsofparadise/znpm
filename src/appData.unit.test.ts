@@ -20,12 +20,12 @@ describe("appDirectoryOf", () => {
 
 	it("takes ZNPM_HOME ahead of every other location on win32", () => {
 		const env = {
-			ZNPM_HOME: join("D:", "znpm-home"),
+			ZNPM_HOME: join(homedir(), "znpm-home"),
 			LOCALAPPDATA: join("D:", "Users", "someone", "AppData", "Local"),
 			XDG_DATA_HOME: join("D:", "share"),
 		};
 
-		expect(appDirectoryOf(env, "win32")).toBe(join("D:", "znpm-home"));
+		expect(appDirectoryOf(env, "win32")).toBe(join(homedir(), "znpm-home"));
 	});
 
 	it("takes ZNPM_HOME ahead of every other location on linux", () => {
