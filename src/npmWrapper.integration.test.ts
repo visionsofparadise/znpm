@@ -37,6 +37,12 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		);
 		chmodSync(join(fakeNpmDirectory, "npm"), 0o755);
 		writeFileSync(join(fakeNpmDirectory, "node_modules", "npm", "bin", "npm-cli.js"), sentinelSource, "utf8");
+		writeState(childAppDirectoryOf(temporaryRoot, localAppData), {
+			enabled: true,
+			disabled: false,
+			changes: [],
+			npmPath: undefined,
+		});
 	});
 
 	afterEach(() => {
@@ -82,7 +88,32 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 			`${JSON.stringify({ name: "host", private: true })}\n`,
 			"utf8",
 		);
-		writeState(childAppDirectory(), { enabled: true, disabled: true, changes: [], npmPath: undefined });
+		writeState(childAppDirectoryOf(temporaryRoot, localAppData), {
+			enabled: true,
+			disabled: true,
+			changes: [],
+			npmPath: undefined,
+		});
+
+		const result = runShadow({ npmArguments: ["install", "left-pad"], env: { npm_config_loglevel: "verbose" } });
+
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({ npmArguments: ["install", "left-pad"], internal: null });
+		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
+	});
+
+	it("runs real npm when state.json is not enabled", () => {
+		writeFileSync(
+			join(temporaryRoot, "package.json"),
+			`${JSON.stringify({ name: "host", private: true })}\n`,
+			"utf8",
+		);
+		writeState(childAppDirectoryOf(temporaryRoot, localAppData), {
+			enabled: false,
+			disabled: false,
+			changes: [],
+			npmPath: undefined,
+		});
 
 		const result = runShadow({ npmArguments: ["install", "left-pad"], env: { npm_config_loglevel: "verbose" } });
 
@@ -156,10 +187,6 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		});
 		expect(converterOutputLinesOf(result.stderr)).toEqual([]);
 	});
-
-	function childAppDirectory(): string {
-		return process.platform === "win32" ? join(localAppData, "znpm") : join(temporaryRoot, ".local", "share", "znpm");
-	}
 
 	function runShadow(options: { npmArguments: Array<string>; env?: NodeJS.ProcessEnv }): {
 		status: number | null;
@@ -374,14 +401,21 @@ describe("the npm wrapper converting captured npm commands", { timeout: 180_000 
 
 	function openWorkspace(): Workspace {
 		const root = mkdtempSync(join(tmpdir(), "znpm-npm-wrapper-convert-"));
+		const localAppData = join(root, "Local");
 
 		workspaces.push(root);
+		writeState(childAppDirectoryOf(root, localAppData), {
+			enabled: true,
+			disabled: false,
+			changes: [],
+			npmPath: undefined,
+		});
 
 		return {
 			root,
 			store: join(root, "store"),
 			cache: join(root, "npm-cache"),
-			localAppData: join(root, "Local"),
+			localAppData,
 		};
 	}
 });
@@ -459,6 +493,10 @@ function runCapturedShadow(
 	});
 
 	return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+function childAppDirectoryOf(homeDirectory: string, localAppData: string): string {
+	return process.platform === "win32" ? join(localAppData, "znpm") : join(homeDirectory, ".local", "share", "znpm");
 }
 
 function deleteMatchingEnvKeys(env: NodeJS.ProcessEnv, names: Array<string>): void {

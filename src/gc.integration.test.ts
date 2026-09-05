@@ -91,7 +91,7 @@ function writeFixture(workspace: Workspace, name: string, dependencies: Record<s
 }
 
 function runNpm(cwd: string, npmArguments: Array<string>, workspace: Workspace): void {
-	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.platform));
+	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.env, process.platform));
 	const env: NodeJS.ProcessEnv = { ...process.env, ZNPM_DISABLE: "1" };
 
 	for (const key of Object.keys(env)) {

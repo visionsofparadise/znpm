@@ -471,7 +471,7 @@ function runNpm(
 	npmArguments: Array<string>,
 	workspace: Workspace,
 ): { stdout: string; stderr: string; status: number | null } {
-	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.platform));
+	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.env, process.platform));
 	const env: NodeJS.ProcessEnv = { ...process.env, ZNPM_DISABLE: "1" };
 
 	for (const key of Object.keys(env)) {

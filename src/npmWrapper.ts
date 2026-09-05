@@ -22,7 +22,7 @@ await runCli(main);
 
 async function main(): Promise<void> {
 	const npmArguments = userArgumentsOf(process.argv, import.meta.url);
-	const appDirectory = appDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.env, process.platform);
 	const npm = resolveNpm(process.env, appDirectory);
 
 	if (process.env.ZNPM_INTERNAL !== undefined) {
@@ -41,7 +41,9 @@ async function main(): Promise<void> {
 		);
 	}
 
-	if (readState(appDirectory).disabled) {
+	const state = readState(appDirectory);
+
+	if (!state.enabled || state.disabled) {
 		exitWithNpm(npm, npmArguments, process.env);
 	}
 

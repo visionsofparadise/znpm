@@ -131,7 +131,7 @@ function placeNpmCommandForwarder(appDirectory: string): void {
 }
 
 function enable(): void {
-	const appDirectory = appDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.env, process.platform);
 	const npmPath = npmPathOf(process.env, appDirectory);
 
 	log(`using real npm at ${npmPath}`);
@@ -144,13 +144,13 @@ function enable(): void {
 function disable(): void {
 	reverseRecordedChanges("disable");
 
-	const appDirectory = appDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.env, process.platform);
 
 	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
 }
 
 function uninstall(): void {
-	const appDirectory = appDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.env, process.platform);
 
 	log("checking for running processes");
 
@@ -211,7 +211,7 @@ function removeZnpmExposure(appDirectory: string): void {
 }
 
 function reverseRecordedChanges(scope: "disable" | "uninstall"): void {
-	const appDirectory = appDirectoryOf(process.platform);
+	const appDirectory = appDirectoryOf(process.env, process.platform);
 	const reversed = changesToReverseOf(readState(appDirectory).changes, scope);
 
 	for (const change of reversed) {

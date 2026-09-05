@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { isRecord } from "./utils/isRecord";
 
 export type PathChange =
@@ -15,9 +15,17 @@ export interface State {
 	npmPath: string | undefined;
 }
 
-export function appDirectoryOf(platform: NodeJS.Platform): string {
+export function appDirectoryOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
+	if (env.ZNPM_HOME !== undefined && env.ZNPM_HOME !== "") {
+		return resolve(env.ZNPM_HOME);
+	}
+
 	if (platform === "win32") {
-		return join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "znpm");
+		return join(env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "znpm");
+	}
+
+	if (env.XDG_DATA_HOME !== undefined && env.XDG_DATA_HOME !== "") {
+		return join(env.XDG_DATA_HOME, "znpm");
 	}
 
 	return join(homedir(), ".local", "share", "znpm");

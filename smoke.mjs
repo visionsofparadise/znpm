@@ -29,8 +29,15 @@ const workspaceRoot = mkdtempSync(join(tmpdir(), "znpm-smoke-"));
 const fixtureDirectory = join(workspaceRoot, "fixture");
 const storeDirectory = join(workspaceRoot, "store");
 const cacheDirectory = join(workspaceRoot, "npm-cache");
+const appDirectory = join(workspaceRoot, "znpm");
 
 mkdirSync(fixtureDirectory, { recursive: true });
+mkdirSync(appDirectory, { recursive: true });
+writeFileSync(
+	join(appDirectory, "state.json"),
+	`${JSON.stringify({ enabled: true, disabled: false, changes: [] })}\n`,
+	"utf8",
+);
 writeFileSync(
 	join(fixtureDirectory, "package.json"),
 	`${JSON.stringify({ name: "znpm-smoke", private: true, dependencies: { ms: "2.1.3" } }, undefined, "\t")}\n`,
@@ -39,7 +46,7 @@ writeFileSync(
 
 const result = spawnSync(npmWrapperBinary, ["install"], {
 	cwd: fixtureDirectory,
-	env: childEnvironmentOf(workspaceRoot, storeDirectory, cacheDirectory),
+	env: childEnvironmentOf(workspaceRoot, storeDirectory, cacheDirectory, appDirectory),
 	stdio: "inherit",
 	timeout: 120_000,
 });
@@ -68,7 +75,7 @@ if (hardLinkCount <= 1) {
 	process.exit(1);
 }
 
-function childEnvironmentOf(isolatedRoot, storePath, cachePath) {
+function childEnvironmentOf(isolatedRoot, storePath, cachePath, appPath) {
 	const env = {};
 
 	for (const [key, value] of Object.entries(process.env)) {
@@ -79,6 +86,7 @@ function childEnvironmentOf(isolatedRoot, storePath, cachePath) {
 		env[key] = value;
 	}
 
+	env.ZNPM_HOME = appPath;
 	env.ZNPM_STORE_DIR = storePath;
 	env.PNPM_HOME = join(isolatedRoot, "pnpm-home");
 	env.LOCALAPPDATA = join(isolatedRoot, "Local");
