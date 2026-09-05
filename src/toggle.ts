@@ -1,6 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { lstatSync, readlinkSync, realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { isRecord } from "./utils/isRecord";
 import { runPowerShell } from "./utils/runPowerShell";
 import type { PathChange, State } from "./appData";
@@ -33,14 +30,6 @@ function removeMatchingPathEntries(pathValue: string, separator: string, matches
 	return entries.filter((existing) => !matches(existing)).join(separator);
 }
 
-function npmFacingChangesOf(changes: Array<PathChange>): Array<PathChange> {
-	return changes.filter(isNpmFacingChange);
-}
-
-export function changesToReverseOf(changes: Array<PathChange>, scope: "disable" | "uninstall"): Array<PathChange> {
-	return scope === "uninstall" ? changes : npmFacingChangesOf(changes);
-}
-
 export function upsertChange(state: State, change: PathChange): State {
 	const key = pathChangeKeyOf(change);
 
@@ -61,71 +50,12 @@ export function applyWindowsUserPath(transform: (pathValue: string) => string): 
 	applyWindowsRegistryPath("user", transform);
 }
 
-export interface PosixSymlinkInspection {
-	exists: boolean;
-	isSymbolicLink: boolean;
-	linkTargetPath: string | undefined;
-	resolvedLinkPath: string | undefined;
-}
+export function hasWindowsMachinePathEntry(entry: string): boolean {
+	const lowercased = entry.toLowerCase();
 
-export function isSymlinkPointingAt(
-	inspection: PosixSymlinkInspection,
-	targetPath: string,
-	resolvedTargetPath: string | undefined,
-): boolean {
-	if (!inspection.exists || !inspection.isSymbolicLink) {
-		return false;
-	}
-
-	if (inspection.linkTargetPath === targetPath) {
-		return true;
-	}
-
-	return inspection.resolvedLinkPath !== undefined && inspection.resolvedLinkPath === resolvedTargetPath;
-}
-
-export function placePosixSymlink(linkPath: string, targetPath: string): void {
-	const inspection = posixSymlinkInspectionOf(linkPath);
-
-	if (!inspection.exists) {
-		runSudo(["ln", "-s", targetPath, linkPath]);
-
-		return;
-	}
-
-	if (isSymlinkPointingAt(inspection, targetPath, resolvedPathOf(targetPath))) {
-		return;
-	}
-
-	throw new Error(`znpm found ${linkPath} that it did not create`);
-}
-
-export function removePosixSymlink(linkPath: string): void {
-	if (!posixSymlinkInspectionOf(linkPath).exists) {
-		return;
-	}
-
-	runSudo(["rm", "-f", linkPath]);
-}
-
-export function removePosixSymlinkPointingAt(linkPath: string, targetPath: string): void {
-	if (!isSymlinkPointingAt(posixSymlinkInspectionOf(linkPath), targetPath, resolvedPathOf(targetPath))) {
-		return;
-	}
-
-	runSudo(["rm", "-f", linkPath]);
-}
-
-function isNpmFacingChange(change: PathChange): boolean {
-	if (change.target === "windowsMachinePath") {
-		return true;
-	}
-
-	if (change.target === "posixSymlink") {
-		return basename(change.path) === "npm";
-	}
-
-	return false;
+	return readWindowsRegistryPath("machine")
+		.value.split(";")
+		.some((existing) => existing.toLowerCase() === lowercased);
 }
 
 function pathChangeKeyOf(change: PathChange): string {
@@ -212,45 +142,6 @@ $subKey = "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"`;
 
 	return `$root = [Microsoft.Win32.Registry]::CurrentUser
 $subKey = "Environment"`;
-}
-
-function runSudo(commandArguments: Array<string>): void {
-	const result = spawnSync("sudo", commandArguments, { stdio: "inherit" });
-
-	if (result.error !== undefined) {
-		throw result.error;
-	}
-
-	if (result.status !== 0) {
-		throw new Error(`znpm sudo ${commandArguments.join(" ")} failed`);
-	}
-}
-
-function posixSymlinkInspectionOf(linkPath: string): PosixSymlinkInspection {
-	const stats = lstatSync(linkPath, { throwIfNoEntry: false });
-
-	if (stats === undefined) {
-		return { exists: false, isSymbolicLink: false, linkTargetPath: undefined, resolvedLinkPath: undefined };
-	}
-
-	if (!stats.isSymbolicLink()) {
-		return { exists: true, isSymbolicLink: false, linkTargetPath: undefined, resolvedLinkPath: undefined };
-	}
-
-	return {
-		exists: true,
-		isSymbolicLink: true,
-		linkTargetPath: readlinkSync(linkPath),
-		resolvedLinkPath: resolvedPathOf(linkPath),
-	};
-}
-
-function resolvedPathOf(path: string): string | undefined {
-	try {
-		return realpathSync(path);
-	} catch {
-		return undefined;
-	}
 }
 
 function powershellSingleQuote(value: string): string {

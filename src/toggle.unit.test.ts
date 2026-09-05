@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type PathChange, type State } from "./appData";
-import {
-	changesToReverseOf,
-	insertPathEntry,
-	isSymlinkPointingAt,
-	removePathEntry,
-	removePathEntryIgnoringCase,
-	upsertChange,
-	type PosixSymlinkInspection,
-} from "./toggle";
+import { insertPathEntry, removeChanges, removePathEntry, removePathEntryIgnoringCase, upsertChange } from "./toggle";
 
 describe("insertPathEntry", () => {
 	it("prepends the entry", () => {
@@ -39,8 +31,9 @@ describe("removePathEntry", () => {
 
 	it("restores the prior value with a colon separator", () => {
 		const prior = "/usr/bin:/bin";
+		const entry = "/home/someone/.local/share/znpm/npm-wrapper";
 
-		expect(removePathEntry(insertPathEntry(prior, "/usr/local/bin", ":"), "/usr/local/bin", ":")).toBe(prior);
+		expect(removePathEntry(insertPathEntry(prior, entry, ":"), entry, ":")).toBe(prior);
 	});
 
 	it("leaves a value that does not contain the entry", () => {
@@ -80,77 +73,6 @@ describe("removePathEntryIgnoringCase", () => {
 	});
 });
 
-describe("isSymlinkPointingAt", () => {
-	const targetPath = "/home/someone/.local/share/znpm/bin/znpm";
-	const inspectionOf = (inspection: Partial<PosixSymlinkInspection>): PosixSymlinkInspection => ({
-		exists: true,
-		isSymbolicLink: true,
-		linkTargetPath: undefined,
-		resolvedLinkPath: undefined,
-		...inspection,
-	});
-
-	it("accepts a symlink whose recorded target is the znpm binary", () => {
-		expect(isSymlinkPointingAt(inspectionOf({ linkTargetPath: targetPath }), targetPath, targetPath)).toBe(true);
-	});
-
-	it("accepts a symlink that resolves to the znpm binary through another link", () => {
-		expect(
-			isSymlinkPointingAt(
-				inspectionOf({ linkTargetPath: "../share/znpm/bin/znpm", resolvedLinkPath: targetPath }),
-				targetPath,
-				targetPath,
-			),
-		).toBe(true);
-	});
-
-	it("refuses a symlink pointing somewhere else", () => {
-		expect(
-			isSymlinkPointingAt(
-				inspectionOf({ linkTargetPath: "/opt/other/znpm", resolvedLinkPath: "/opt/other/znpm" }),
-				targetPath,
-				targetPath,
-			),
-		).toBe(false);
-	});
-
-	it("refuses a regular file standing where the symlink would be", () => {
-		expect(isSymlinkPointingAt(inspectionOf({ isSymbolicLink: false }), targetPath, targetPath)).toBe(false);
-	});
-
-	it("refuses an absent entry", () => {
-		expect(isSymlinkPointingAt(inspectionOf({ exists: false, isSymbolicLink: false }), targetPath, targetPath)).toBe(
-			false,
-		);
-	});
-
-	it("refuses a dangling symlink whose target cannot be resolved", () => {
-		expect(isSymlinkPointingAt(inspectionOf({ linkTargetPath: "/opt/other/znpm" }), targetPath, undefined)).toBe(
-			false,
-		);
-	});
-});
-
-describe("changesToReverseOf", () => {
-	const changes: Array<PathChange> = [
-		{ target: "windowsMachinePath", entry: "C:\\znpm\\shim" },
-		{ target: "windowsUserPath", entry: "C:\\znpm\\bin" },
-		{ target: "posixSymlink", path: "/usr/local/bin/npm" },
-		{ target: "posixSymlink", path: "/usr/local/bin/znpm" },
-	];
-
-	it("selects the npm-facing entries for disable", () => {
-		expect(changesToReverseOf(changes, "disable")).toEqual([
-			{ target: "windowsMachinePath", entry: "C:\\znpm\\shim" },
-			{ target: "posixSymlink", path: "/usr/local/bin/npm" },
-		]);
-	});
-
-	it("selects every entry for uninstall", () => {
-		expect(changesToReverseOf(changes, "uninstall")).toEqual(changes);
-	});
-});
-
 describe("upsertChange", () => {
 	it("leaves changes duplicate-free on repeat enable", () => {
 		const empty: State = { enabled: false, disabled: false, changes: [], npmPath: undefined };
@@ -160,5 +82,15 @@ describe("upsertChange", () => {
 		const twice = upsertChange(upsertChange(once, machine), user);
 
 		expect(twice.changes).toEqual([machine, user]);
+	});
+});
+
+describe("removeChanges", () => {
+	it("drops the reversed change and keeps the rest", () => {
+		const machine: PathChange = { target: "windowsMachinePath", entry: "C:\\znpm\\shim" };
+		const user: PathChange = { target: "windowsUserPath", entry: "C:\\znpm\\bin" };
+		const state: State = { enabled: true, disabled: false, changes: [machine, user], npmPath: undefined };
+
+		expect(removeChanges(state, [machine]).changes).toEqual([user]);
 	});
 });

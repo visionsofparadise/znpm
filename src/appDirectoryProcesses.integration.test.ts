@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
@@ -87,17 +87,7 @@ describe("runningAppDirectoryProcessesOf", { timeout: 60_000 }, () => {
 			chmodSync(held, 0o755);
 		}
 
-		let spawnPath = held;
-
-		if (process.platform !== "win32") {
-			const linkDirectory = join(root, "usr", "local", "bin");
-
-			mkdirSync(linkDirectory, { recursive: true });
-			spawnPath = join(linkDirectory, "npm");
-			symlinkSync(held, spawnPath);
-		}
-
-		const child = spawn(spawnPath, ["-e", "setInterval(() => {}, 1000)"], {
+		const child = spawn(held, ["-e", "setInterval(() => {}, 1000)"], {
 			stdio: "ignore",
 			windowsHide: true,
 		});

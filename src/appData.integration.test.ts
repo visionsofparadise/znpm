@@ -52,7 +52,7 @@ describe("the state file", () => {
 			changes: [
 				{ target: "windowsMachinePath", entry: "C:\\znpm\\shim" },
 				{ target: "windowsUserPath", entry: "C:\\znpm\\bin" },
-				{ target: "posixSymlink", path: "/usr/local/bin/npm" },
+				{ target: "posixSymlink", path: "/opt/legacy/bin/npm" },
 			],
 			npmPath: "/usr/local/lib/node/npm",
 		};
@@ -72,7 +72,7 @@ describe("the state file", () => {
 
 	it("creates the app directory and records the state as JSON", () => {
 		const appDirectory = join(temporaryRoot, "znpm");
-		const changes: Array<PathChange> = [{ target: "posixSymlink", path: "/usr/local/bin/znpm" }];
+		const changes: Array<PathChange> = [{ target: "posixSymlink", path: "/opt/legacy/bin/znpm" }];
 		const state: State = { enabled: true, disabled: false, changes, npmPath: "/usr/local/lib/node/npm" };
 
 		writeState(appDirectory, state);

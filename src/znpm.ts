@@ -1,13 +1,25 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+	chmodSync,
+	copyFileSync,
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readFileSync,
+	readlinkSync,
+	rmSync,
+	statSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { getStorePath } from "@pnpm/store-path";
 import { finishWorkers } from "@pnpm/worker";
 import {
 	appDirectoryOf,
-	binDirectoryOf,
 	npmWrapperDirectoryOf,
 	npmWrapperPathOf,
 	readState,
@@ -15,31 +27,24 @@ import {
 	type PathChange,
 } from "./appData";
 import { runningAppDirectoryProcessesOf, uninstallBusyMessageOf } from "./appDirectoryProcessesOf";
-import { npmPathOf } from "./npm";
+import { ensureExposure, isNpmPackageExecutable, removeExposure } from "./exposure";
+import { applyMachinePathElevated, powershellSingleQuote } from "./machinePath";
+import { npmPathOf, resolveNpm } from "./npm";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { pruneStoreDirectories } from "./prune";
 import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
 import {
 	applyWindowsMachinePath,
 	applyWindowsUserPath,
-	changesToReverseOf,
 	insertPathEntry,
 	npmCommandForwarder,
-	placePosixSymlink,
 	removeChanges,
 	removePathEntry,
-	removePathEntryIgnoringCase,
-	removePosixSymlink,
-	removePosixSymlinkPointingAt,
-	upsertChange,
 } from "./toggle";
-import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
+import { isRecord } from "./utils/isRecord";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
-
-const npmLinkPath = "/usr/local/bin/npm";
-const znpmLinkPath = "/usr/local/bin/znpm";
 
 setPnpmWorkerScriptPath();
 await runCli(main);
@@ -113,8 +118,20 @@ async function gc(): Promise<void> {
 	}
 }
 
-function placeNpmCommandForwarder(appDirectory: string): void {
+function npmWrapperSourcePathOf(execPath: string): string {
+	return join(dirname(execPath), process.platform === "win32" ? "npm-wrapper.exe" : "npm-wrapper");
+}
+
+function placeNpmWrapper(appDirectory: string): void {
 	const npmWrapperPath = npmWrapperPathOf(appDirectory);
+	const sourcePath = npmWrapperSourcePathOf(process.execPath);
+
+	if (existsSync(sourcePath) && !isPlacedBinaryCurrent(sourcePath, npmWrapperPath)) {
+		log(`placing ${npmWrapperPath}`);
+		mkdirSync(dirname(npmWrapperPath), { recursive: true });
+		copyFileSync(sourcePath, npmWrapperPath);
+		chmodSync(npmWrapperPath, 0o755);
+	}
 
 	if (!existsSync(npmWrapperPath)) {
 		throw new Error(`znpm found no npm wrapper binary at ${npmWrapperPath}`);
@@ -130,20 +147,34 @@ function placeNpmCommandForwarder(appDirectory: string): void {
 	writeFileSync(npmCommandPath, npmCommandForwarder, "utf8");
 }
 
+function isPlacedBinaryCurrent(sourcePath: string, placedPath: string): boolean {
+	const placed = statSync(placedPath, { throwIfNoEntry: false });
+
+	if (placed?.size !== statSync(sourcePath).size) {
+		return false;
+	}
+
+	return sha256Of(sourcePath) === sha256Of(placedPath);
+}
+
+function sha256Of(path: string): string {
+	return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
 function enable(): void {
 	const appDirectory = appDirectoryOf(process.env, process.platform);
+
+	placeNpmWrapper(appDirectory);
+	log("placing the PATH exposure");
+	ensureExposure(appDirectory, process.env);
+
 	const npmPath = npmPathOf(process.env, appDirectory);
 
 	log(`using real npm at ${npmPath}`);
-	placeNpmCommandForwarder(appDirectory);
-	writeState(appDirectory, { ...readState(appDirectory), npmPath });
-	applyToggleChanges(appDirectory);
-	writeState(appDirectory, { ...readState(appDirectory), enabled: true });
+	writeState(appDirectory, { ...readState(appDirectory), npmPath, enabled: true });
 }
 
 function disable(): void {
-	reverseRecordedChanges("disable");
-
 	const appDirectory = appDirectoryOf(process.env, process.platform);
 
 	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
@@ -160,67 +191,51 @@ function uninstall(): void {
 		throw new Error(uninstallBusyMessageOf(running));
 	}
 
-	reverseRecordedChanges("uninstall");
-
-	removeZnpmExposure(appDirectory);
 	writeState(appDirectory, { ...readState(appDirectory), enabled: false });
+
+	const npmRemoval = npmPackageRemovalOf(appDirectory);
+
+	reverseRecordedChanges(appDirectory);
+	log("removing the PATH exposure");
+	removeExposure(appDirectory, process.env);
 
 	if (process.platform === "win32") {
 		log(`removing ${appDirectory}`);
-		scheduleWindowsAppDirectoryRemoval(appDirectory);
+		scheduleWindowsAppDirectoryRemoval(appDirectory, npmRemoval);
 
 		return;
 	}
 
 	log(`removing ${appDirectory}`);
 	rmSync(appDirectory, { recursive: true, force: true });
+
+	if (npmRemoval !== undefined) {
+		log(`removing @zcross/znpm with ${npmRemoval.command}`);
+		spawnSync(npmRemoval.command, npmRemoval.args, {
+			stdio: "inherit",
+			env: { ...process.env, ZNPM_DISABLE: "1" },
+		});
+	}
 }
 
-function applyToggleChanges(appDirectory: string): void {
-	if (process.platform === "win32") {
-		const npmWrapperDirectory = npmWrapperDirectoryOf(appDirectory);
-
-		log(`prepending ${npmWrapperDirectory} to the machine PATH`);
-		applyMachinePathElevated("insert", npmWrapperDirectory);
-		recordChange(appDirectory, { target: "windowsMachinePath", entry: npmWrapperDirectory });
-
-		return;
+function npmPackageRemovalOf(appDirectory: string): { command: string; args: Array<string> } | undefined {
+	if (!isNpmPackageExecutable(process.execPath)) {
+		return undefined;
 	}
 
-	const npmWrapperPath = npmWrapperPathOf(appDirectory);
+	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectory);
 
-	log(`linking ${npmLinkPath} -> ${npmWrapperPath}`);
-	placePosixSymlink(npmLinkPath, npmWrapperPath);
-	recordChange(appDirectory, { target: "posixSymlink", path: npmLinkPath });
+	return { command: npm.command, args: [...npm.argsPrefix, "rm", "-g", "@zcross/znpm"] };
 }
 
-function removeZnpmExposure(appDirectory: string): void {
-	if (process.platform === "win32") {
-		const binDirectory = binDirectoryOf(appDirectory);
-
-		log(`removing ${binDirectory} from the user PATH`);
-		applyWindowsUserPath((pathValue) => removePathEntryIgnoringCase(pathValue, binDirectory, ";"));
-
-		return;
-	}
-
-	const znpmPath = join(binDirectoryOf(appDirectory), "znpm");
-
-	log(`removing ${znpmLinkPath}`);
-	removePosixSymlinkPointingAt(znpmLinkPath, znpmPath);
-}
-
-function reverseRecordedChanges(scope: "disable" | "uninstall"): void {
-	const appDirectory = appDirectoryOf(process.env, process.platform);
-	const reversed = changesToReverseOf(readState(appDirectory).changes, scope);
-
-	for (const change of reversed) {
-		reverseChange(change);
+function reverseRecordedChanges(appDirectory: string): void {
+	for (const change of readState(appDirectory).changes) {
+		reverseChange(change, appDirectory);
 		writeState(appDirectory, removeChanges(readState(appDirectory), [change]));
 	}
 }
 
-function reverseChange(change: PathChange): void {
+function reverseChange(change: PathChange, appDirectory: string): void {
 	switch (change.target) {
 		case "windowsMachinePath": {
 			log(`removing ${change.entry} from the machine PATH`);
@@ -238,15 +253,37 @@ function reverseChange(change: PathChange): void {
 
 		case "posixSymlink": {
 			log(`removing ${change.path}`);
-			removePosixSymlink(change.path);
+			removeLegacyPosixSymlink(change.path, appDirectory);
 
 			return;
 		}
 	}
 }
 
-function recordChange(appDirectory: string, change: PathChange): void {
-	writeState(appDirectory, upsertChange(readState(appDirectory), change));
+function removeLegacyPosixSymlink(linkPath: string, appDirectory: string): void {
+	const stats = lstatSync(linkPath, { throwIfNoEntry: false });
+
+	if (stats === undefined || !stats.isSymbolicLink() || !readlinkSync(linkPath).startsWith(appDirectory)) {
+		return;
+	}
+
+	try {
+		unlinkSync(linkPath);
+	} catch (error: unknown) {
+		if (isPermissionError(error)) {
+			console.error(`znpm cannot remove ${linkPath}; remove it, then run znpm uninstall again`);
+		}
+
+		throw error;
+	}
+}
+
+function isPermissionError(error: unknown): boolean {
+	if (!isRecord(error)) {
+		return false;
+	}
+
+	return error.code === "EACCES" || error.code === "EPERM";
 }
 
 function applyMachinePath(insert: string | undefined, remove: string | undefined): void {
@@ -265,41 +302,10 @@ function applyMachinePath(insert: string | undefined, remove: string | undefined
 	throw new Error("znpm apply-machine-path requires --insert <dir> or --remove <dir>");
 }
 
-function applyMachinePathElevated(action: "insert" | "remove", entry: string): void {
-	const { filePath, argumentList } = reinvocationOf(["apply-machine-path", `--${action}`, entry]);
-	const script = `$process = Start-Process -FilePath ${powershellSingleQuote(filePath)} -ArgumentList ${powershellStringArray(argumentList)} -Verb RunAs -Wait -PassThru
-if ($null -eq $process) { exit 1 }
-exit $process.ExitCode
-`;
-	const encoded = Buffer.from(script, "utf16le").toString("base64");
-	const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
-		stdio: "inherit",
-	});
-
-	if (result.error !== undefined) {
-		throw result.error;
-	}
-
-	if (result.status !== 0) {
-		throw new Error("znpm could not apply the machine PATH");
-	}
-}
-
-function reinvocationOf(commandArguments: Array<string>): { filePath: string; argumentList: Array<string> } {
-	const filePath = process.execPath;
-	const scriptPath = process.argv[1];
-	const runningFromScript =
-		scriptPath !== undefined &&
-		(scriptPath.endsWith(".ts") || scriptPath.endsWith(".js") || scriptPath.endsWith(".mjs"));
-
-	if (runningFromScript) {
-		return { filePath, argumentList: [...process.execArgv, resolve(scriptPath), ...commandArguments] };
-	}
-
-	return { filePath, argumentList: commandArguments };
-}
-
-function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
+function scheduleWindowsAppDirectoryRemoval(
+	appDirectory: string,
+	trailing: { command: string; args: Array<string> } | undefined,
+): void {
 	const scriptPath = join(tmpdir(), `znpm-uninstall-${String(process.pid)}.ps1`);
 	const script = [
 		"$ErrorActionPreference = 'SilentlyContinue'",
@@ -309,6 +315,7 @@ function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
 		"  if (-not (Test-Path -LiteralPath $target)) { break }",
 		"  Remove-Item -LiteralPath $target -Recurse -Force",
 		"}",
+		...trailingScriptLinesOf(trailing),
 		"Remove-Item -LiteralPath $PSCommandPath -Force",
 		"",
 	].join("\r\n");
@@ -328,6 +335,16 @@ function scheduleWindowsAppDirectoryRemoval(appDirectory: string): void {
 	child.unref();
 }
 
+function trailingScriptLinesOf(trailing: { command: string; args: Array<string> } | undefined): Array<string> {
+	if (trailing === undefined) {
+		return [];
+	}
+
+	const quoted = [trailing.command, ...trailing.args].map((value) => powershellSingleQuote(value));
+
+	return ["$env:ZNPM_DISABLE = '1'", `& ${quoted.join(" ")}`];
+}
+
 function runWithStatus(inProgress: string, complete: string, work: () => void): void {
 	log(inProgress);
 	work();
@@ -336,12 +353,4 @@ function runWithStatus(inProgress: string, complete: string, work: () => void): 
 
 function log(message: string): void {
 	console.log(message);
-}
-
-function powershellSingleQuote(value: string): string {
-	return `'${value.replaceAll("'", "''")}'`;
-}
-
-function powershellStringArray(values: Array<string>): string {
-	return `@(${values.map((value) => powershellSingleQuote(quotedProcessArgumentOf(value))).join(",")})`;
 }
