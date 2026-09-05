@@ -14,7 +14,7 @@ jobs:
          matrix:
             include:
                - os: ubuntu-latest
-                 targets: --target linux-x64 --target linux-arm64
+                 targets: --target linux-x64 --target linux-arm64 --target linux-x64-musl --target linux-arm64-musl
                - os: windows-latest
                  targets: --target windows-x64 --target windows-arm64
                - os: macos-latest
@@ -39,3 +39,44 @@ jobs:
          - run: node build.mjs ${{ matrix.targets }}
 
          - run: node smoke.mjs
+
+         - if: matrix.os == 'macos-latest'
+           run: sh installSmoke.sh dist
+
+         - if: matrix.os == 'windows-latest'
+           timeout-minutes: 10
+           run: powershell -File installSmoke.ps1 -Dist dist
+
+         - uses: actions/upload-artifact@v4
+           with:
+              name: dist-${{ matrix.os }}
+              path: dist/
+
+   containers:
+      needs: test
+      runs-on: ubuntu-latest
+      timeout-minutes: 15
+      strategy:
+         fail-fast: false
+         matrix:
+            include:
+               - image: node:24-bookworm-slim
+                 user: root
+                 home: /root
+               - image: node:24-alpine
+                 user: root
+                 home: /root
+               - image: node:24-bookworm
+                 user: node
+                 home: /home/node
+      steps:
+         - uses: actions/checkout@v4
+
+         - uses: actions/download-artifact@v4
+           with:
+              name: dist-ubuntu-latest
+              path: dist/
+
+         - run: chmod +x dist/*
+
+         - run: docker run --rm --user ${{ matrix.user }} -e HOME=${{ matrix.home }} -v "$PWD:/repo:ro" ${{ matrix.image }} sh /repo/installSmoke.sh /repo/dist
