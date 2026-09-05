@@ -41,9 +41,9 @@ if (!existsSync(trivyConfig)) {
 	process.exit(1);
 }
 
-const toolsMjs = path.join(repoRoot, "tools.mjs");
+const toolsMjs = path.join(repoRoot, "scripts", "tools.mjs");
 if (!existsSync(toolsMjs)) {
-	console.error(`missing tools.mjs at ${toolsMjs}`);
+	console.error(`missing scripts/tools.mjs at ${toolsMjs}`);
 	process.exit(1);
 }
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const require = createRequire(import.meta.url);
-const repositoryRoot = fileURLToPath(new URL(".", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const bunBinary = join(dirname(require.resolve("bun/package.json")), "bin", "bun.exe");
 
 const targets = {
@@ -30,7 +30,7 @@ const selectedTargets = values.target ?? Object.keys(targets);
 
 for (const targetName of selectedTargets) {
 	if (!Object.hasOwn(targets, targetName)) {
-		console.error(`unknown target ${targetName}; build.mjs builds ${Object.keys(targets).join(", ")}`);
+		console.error(`unknown target ${targetName}; scripts/build.mjs builds ${Object.keys(targets).join(", ")}`);
 		process.exit(1);
 	}
 }

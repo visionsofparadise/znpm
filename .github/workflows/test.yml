@@ -36,16 +36,16 @@ jobs:
 
          - run: npm run integration
 
-         - run: node build.mjs ${{ matrix.targets }}
+         - run: node scripts/build.mjs ${{ matrix.targets }}
 
-         - run: node smoke.mjs
+         - run: node scripts/smoke.mjs
 
          - if: matrix.os == 'macos-latest'
-           run: sh installSmoke.sh dist
+           run: sh scripts/installSmoke.sh dist
 
          - if: matrix.os == 'windows-latest'
            timeout-minutes: 10
-           run: powershell -File installSmoke.ps1 -Dist dist
+           run: powershell -File scripts/installSmoke.ps1 -Dist dist
 
          - uses: actions/upload-artifact@v4
            with:
@@ -79,4 +79,4 @@ jobs:
 
          - run: chmod +x dist/*
 
-         - run: docker run --rm --user ${{ matrix.user }} -e HOME=${{ matrix.home }} -v "$PWD:/repo:ro" ${{ matrix.image }} sh /repo/installSmoke.sh /repo/dist
+         - run: docker run --rm --user ${{ matrix.user }} -e HOME=${{ matrix.home }} -v "$PWD:/repo:ro" ${{ matrix.image }} sh /repo/scripts/installSmoke.sh /repo/dist

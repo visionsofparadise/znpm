@@ -92,7 +92,7 @@ function Wait-AppDirectoryRemoval {
 	}
 }
 
-$repositoryRoot = Split-Path -Parent $PSCommandPath
+$scriptDirectory = Split-Path -Parent $PSCommandPath
 $distDirectory = (Resolve-Path -LiteralPath $Dist).Path
 $smokeRoot = Join-Path ([IO.Path]::GetTempPath()) ("znpm-smoke-" + [Guid]::NewGuid().ToString("n"))
 $fixtureDirectory = Join-Path $smokeRoot "fixture"
@@ -113,7 +113,7 @@ try {
 	New-Item -ItemType Directory -Path $fixtureDirectory -Force | Out-Null
 
 	Write-Step "install"
-	& (Join-Path $repositoryRoot "install.ps1")
+	& (Join-Path $scriptDirectory "install.ps1")
 
 	Write-Step "assert the installer wrote the exposure and left znpm disabled"
 

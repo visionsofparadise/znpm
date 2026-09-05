@@ -2,12 +2,12 @@
 set -eu
 
 if [ $# -ne 1 ]; then
-	printf '%s\n' "usage: installSmoke.sh <dist directory>" >&2
+	printf '%s\n' "usage: scripts/installSmoke.sh <dist directory>" >&2
 	exit 1
 fi
 
 dist_directory="$(cd "$1" && pwd)"
-repository_root="$(cd "$(dirname "$0")" && pwd)"
+script_directory="$(cd "$(dirname "$0")" && pwd)"
 
 fail() {
 	printf '%s\n' "$1" >&2
@@ -44,7 +44,7 @@ PNPM_HOME="$smoke_root/pnpm-home"
 export ZNPM_HOME ZNPM_STORE_DIR PNPM_HOME
 
 step "install"
-ZNPM_DIST="$dist_directory" sh "$repository_root/install.sh" >"$smoke_root/env.sh" || fail "install.sh exited nonzero"
+ZNPM_DIST="$dist_directory" sh "$script_directory/install.sh" >"$smoke_root/env.sh" || fail "install.sh exited nonzero"
 
 . "$smoke_root/env.sh"
 

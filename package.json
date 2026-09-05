@@ -10,12 +10,12 @@
 		"url": "git+https://github.com/visionsofparadise/znpm.git"
 	},
 	"scripts": {
-		"prepare": "node -e \"import('node:child_process').then(({execSync})=>{try{execSync('git rev-parse --is-inside-work-tree',{stdio:'ignore'});execSync('git config core.hooksPath .githooks')}catch{}})\" && node tools.mjs install",
+		"prepare": "node -e \"import('node:child_process').then(({execSync})=>{try{execSync('git rev-parse --is-inside-work-tree',{stdio:'ignore'});execSync('git config core.hooksPath .githooks')}catch{}})\" && node scripts/tools.mjs install",
 		"fix": "concurrently -m 1 --group \"prettier --write .\" \"eslint . --fix --cache\"",
-		"check": "concurrently --group \"prettier --check .\" \"eslint . --no-cache -f unix\" \"tsc --noEmit --pretty false\" \"knip --no-progress\" \"jscpd .\" \"node tools.mjs run actionlint\"",
+		"check": "concurrently --group \"prettier --check .\" \"eslint . --no-cache -f unix\" \"tsc --noEmit --pretty false\" \"knip --no-progress\" \"jscpd .\" \"node scripts/tools.mjs run actionlint\"",
 		"unit": "vitest run unit",
 		"integration": "vitest run integration",
-		"build": "node build.mjs",
+		"build": "node scripts/build.mjs",
 		"start": "tsx src/znpm.ts"
 	},
 	"dependencies": {

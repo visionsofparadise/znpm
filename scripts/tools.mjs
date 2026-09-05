@@ -19,7 +19,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
-const root = path.dirname(fileURLToPath(import.meta.url));
+const root = fileURLToPath(new URL("..", import.meta.url));
 const toolsDir = path.join(root, ".tools");
 const manifestPath = path.join(root, "tools.json");
 
@@ -173,7 +173,7 @@ function run(toolName, args) {
 		process.exit(1);
 	}
 	if (!isInstalled(toolName, platformSpec)) {
-		console.error(`${toolName} is not installed or checksum marker mismatches; run: node tools.mjs install`);
+		console.error(`${toolName} is not installed or checksum marker mismatches; run: node scripts/tools.mjs install`);
 		process.exit(1);
 	}
 	const bin = binaryPath(platformSpec);
@@ -195,11 +195,11 @@ if (command === "install") {
 } else if (command === "run") {
 	const [toolName, ...toolArgs] = rest;
 	if (!toolName) {
-		console.error("usage: node tools.mjs run <tool> [args...]");
+		console.error("usage: node scripts/tools.mjs run <tool> [args...]");
 		process.exit(1);
 	}
 	run(toolName, toolArgs);
 } else {
-	console.error("usage: node tools.mjs install | node tools.mjs run <tool> [args...]");
+	console.error("usage: node scripts/tools.mjs install | node scripts/tools.mjs run <tool> [args...]");
 	process.exit(1);
 }

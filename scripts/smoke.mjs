@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repositoryRoot = fileURLToPath(new URL(".", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const platformNames = { win32: "windows", linux: "linux", darwin: "darwin" };
 const platformName = platformNames[process.platform];
 
