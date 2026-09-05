@@ -14,10 +14,13 @@ if (platformName === undefined) {
 	process.exit(1);
 }
 
+const libcSuffix =
+	process.platform === "linux" && process.report.getReport().header.glibcVersionRuntime === undefined ? "-musl" : "";
+
 const npmWrapperBinary = join(
 	repositoryRoot,
 	"dist",
-	`npm-wrapper-${platformName}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`,
+	`npm-wrapper-${platformName}-${process.arch}${libcSuffix}${process.platform === "win32" ? ".exe" : ""}`,
 );
 
 if (!existsSync(npmWrapperBinary)) {

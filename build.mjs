@@ -14,6 +14,8 @@ const targets = {
 	"windows-arm64": { bunTarget: "bun-windows-arm64", extension: ".exe" },
 	"linux-x64": { bunTarget: "bun-linux-x64", extension: "" },
 	"linux-arm64": { bunTarget: "bun-linux-arm64", extension: "" },
+	"linux-x64-musl": { bunTarget: "bun-linux-x64-musl", extension: "" },
+	"linux-arm64-musl": { bunTarget: "bun-linux-arm64-musl", extension: "" },
 	"darwin-arm64": { bunTarget: "bun-darwin-arm64", extension: "" },
 	"darwin-x64": { bunTarget: "bun-darwin-x64", extension: "" },
 };
