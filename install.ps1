@@ -62,6 +62,44 @@ function Get-PosixSingleQuote {
 	return "'" + $Value.Replace("'", "'\''") + "'"
 }
 
+function Get-NormalizedPosixPath {
+	param([string]$Value)
+
+	$rooted = $Value.StartsWith("/")
+	$segments = New-Object System.Collections.Generic.List[string]
+
+	foreach ($segment in ($Value -split "/")) {
+		if ($segment -eq "" -or $segment -eq ".") {
+			continue
+		}
+
+		if ($segment -eq "..") {
+			if ($segments.Count -gt 0 -and $segments[$segments.Count - 1] -ne "..") {
+				$segments.RemoveAt($segments.Count - 1)
+				continue
+			}
+
+			if ($rooted) {
+				continue
+			}
+		}
+
+		$segments.Add($segment)
+	}
+
+	$joined = [string]::Join("/", $segments)
+
+	if ($rooted) {
+		return "/" + $joined
+	}
+
+	if ($joined -eq "") {
+		return "."
+	}
+
+	return $joined
+}
+
 function Get-PosixEnvScript {
 	param([string]$AppDirectory)
 
@@ -117,20 +155,20 @@ function Add-StartupLine {
 }
 
 function Install-PosixExposure {
-	param([string]$AppDirectory)
+	param([string]$AppDirectory, [string]$HomeDirectory)
 
 	[IO.File]::WriteAllText((Join-Path $AppDirectory "env"), (Get-PosixEnvScript -AppDirectory $AppDirectory))
 	[IO.File]::WriteAllText((Join-Path $AppDirectory "env.fish"), (Get-PosixFishEnvScript -AppDirectory $AppDirectory))
 
 	$line = Get-StartupSourceLine -AppDirectory $AppDirectory
 
-	Add-StartupLine -Path (Join-Path $HOME ".profile") -Line $line -CreateIfAbsent $true
-	Add-StartupLine -Path (Join-Path $HOME ".bashrc") -Line $line -CreateIfAbsent $true
-	Add-StartupLine -Path (Join-Path $HOME ".zshrc") -Line $line -CreateIfAbsent $true
-	Add-StartupLine -Path (Join-Path $HOME ".bash_profile") -Line $line -CreateIfAbsent $false
-	Add-StartupLine -Path (Join-Path $HOME ".zprofile") -Line $line -CreateIfAbsent $false
+	Add-StartupLine -Path (Join-Path $HomeDirectory ".profile") -Line $line -CreateIfAbsent $true
+	Add-StartupLine -Path (Join-Path $HomeDirectory ".bashrc") -Line $line -CreateIfAbsent $true
+	Add-StartupLine -Path (Join-Path $HomeDirectory ".zshrc") -Line $line -CreateIfAbsent $true
+	Add-StartupLine -Path (Join-Path $HomeDirectory ".bash_profile") -Line $line -CreateIfAbsent $false
+	Add-StartupLine -Path (Join-Path $HomeDirectory ".zprofile") -Line $line -CreateIfAbsent $false
 
-	$fishDirectory = Join-Path (Join-Path $HOME ".config") "fish"
+	$fishDirectory = Join-Path (Join-Path $HomeDirectory ".config") "fish"
 
 	if (-not (Test-Path -LiteralPath $fishDirectory)) {
 		return
@@ -205,20 +243,26 @@ $target = Get-InstallTarget
 $windows = $target.StartsWith("windows-")
 $exe = if ($windows) { ".exe" } else { "" }
 
+$homeDirectory = if (-not [string]::IsNullOrEmpty($env:HOME)) { $env:HOME } else { $HOME }
+
 if (-not [string]::IsNullOrEmpty($env:ZNPM_HOME)) {
 	$appDirectory = [IO.Path]::GetFullPath($env:ZNPM_HOME)
+
+	if (-not $windows) {
+		$appDirectory = Get-NormalizedPosixPath -Value $appDirectory
+	}
 } elseif ($windows) {
 	$localAppData = $env:LOCALAPPDATA
 
 	if ([string]::IsNullOrEmpty($localAppData)) {
-		$localAppData = Join-Path $HOME "AppData\Local"
+		$localAppData = Join-Path $homeDirectory "AppData\Local"
 	}
 
 	$appDirectory = Join-Path $localAppData "znpm"
 } elseif (-not [string]::IsNullOrEmpty($env:XDG_DATA_HOME)) {
-	$appDirectory = Join-Path $env:XDG_DATA_HOME "znpm"
-} elseif (-not [string]::IsNullOrEmpty($HOME)) {
-	$appDirectory = Join-Path $HOME ".local/share/znpm"
+	$appDirectory = Get-NormalizedPosixPath -Value ($env:XDG_DATA_HOME + "/znpm")
+} elseif (-not [string]::IsNullOrEmpty($homeDirectory)) {
+	$appDirectory = Get-NormalizedPosixPath -Value ($homeDirectory + "/.local/share/znpm")
 } else {
 	throw "znpm requires ZNPM_HOME, XDG_DATA_HOME, or HOME"
 }
@@ -300,7 +344,7 @@ if ($windows) {
 	Add-UserPathEntry -Entry $binDirectory
 } else {
 	Write-Step "writing $appDirectory/env and the shell startup lines"
-	Install-PosixExposure -AppDirectory $appDirectory
+	Install-PosixExposure -AppDirectory $appDirectory -HomeDirectory $homeDirectory
 }
 
 Write-Step "installed"

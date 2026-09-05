@@ -75,11 +75,72 @@ single_quote() {
 	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+normalize_posix_path() {
+	normalize_rest="$1"
+	normalize_result=""
+
+	case "$normalize_rest" in
+		/*) normalize_root="/" ;;
+		*) normalize_root="" ;;
+	esac
+
+	while [ -n "$normalize_rest" ]; do
+		normalize_segment="${normalize_rest%%/*}"
+
+		case "$normalize_rest" in
+			*/*) normalize_rest="${normalize_rest#*/}" ;;
+			*) normalize_rest="" ;;
+		esac
+
+		case "$normalize_segment" in
+			"" | ".") ;;
+			"..")
+				case "$normalize_result" in
+					"" | ".." | */..)
+						if [ -z "$normalize_root" ]; then
+							normalize_result="${normalize_result:+$normalize_result/}.."
+						fi
+						;;
+					*/*) normalize_result="${normalize_result%/*}" ;;
+					*) normalize_result="" ;;
+				esac
+				;;
+			*) normalize_result="${normalize_result:+$normalize_result/}$normalize_segment" ;;
+		esac
+	done
+
+	if [ -n "$normalize_root" ]; then
+		printf '%s\n' "/$normalize_result"
+	elif [ -n "$normalize_result" ]; then
+		printf '%s\n' "$normalize_result"
+	else
+		printf '%s\n' "."
+	fi
+}
+
+resolve_posix_path() {
+	case "$1" in
+		/*) normalize_posix_path "$1" ;;
+		*) normalize_posix_path "$(pwd -P)/$1" ;;
+	esac
+}
+
+home_directory=""
+
+if [ "$os" != "windows" ]; then
+	if [ -z "${HOME:-}" ]; then
+		step "znpm requires HOME to write the shell startup lines."
+		exit 1
+	fi
+
+	home_directory="$HOME"
+fi
+
 if [ -n "${ZNPM_HOME:-}" ]; then
 	if [ "$os" = "windows" ]; then
 		app_directory="$(posix_path "$ZNPM_HOME")"
 	else
-		app_directory="$ZNPM_HOME"
+		app_directory="$(resolve_posix_path "$ZNPM_HOME")"
 	fi
 elif [ "$os" = "windows" ]; then
 	if [ -n "${LOCALAPPDATA:-}" ]; then
@@ -92,12 +153,9 @@ elif [ "$os" = "windows" ]; then
 	fi
 	app_directory="$(posix_path "$windows_home")/znpm"
 elif [ -n "${XDG_DATA_HOME:-}" ]; then
-	app_directory="$XDG_DATA_HOME/znpm"
-elif [ -n "${HOME:-}" ]; then
-	app_directory="$HOME/.local/share/znpm"
+	app_directory="$(normalize_posix_path "$XDG_DATA_HOME/znpm")"
 else
-	step "znpm requires ZNPM_HOME, XDG_DATA_HOME, or HOME."
-	exit 1
+	app_directory="$(normalize_posix_path "$home_directory/.local/share/znpm")"
 fi
 
 bin_directory="$app_directory/bin"
@@ -181,15 +239,15 @@ expose_posix() {
 
 	startup_line=". $(single_quote "$app_directory/env")"
 
-	add_startup_line "$HOME/.profile" create
-	add_startup_line "$HOME/.bashrc" create
-	add_startup_line "$HOME/.zshrc" create
-	add_startup_line "$HOME/.bash_profile" skip
-	add_startup_line "$HOME/.zprofile" skip
+	add_startup_line "$home_directory/.profile" create
+	add_startup_line "$home_directory/.bashrc" create
+	add_startup_line "$home_directory/.zshrc" create
+	add_startup_line "$home_directory/.bash_profile" skip
+	add_startup_line "$home_directory/.zprofile" skip
 
-	if [ -d "$HOME/.config/fish" ]; then
-		mkdir -p "$HOME/.config/fish/conf.d"
-		cp "$app_directory/env.fish" "$HOME/.config/fish/conf.d/znpm.fish"
+	if [ -d "$home_directory/.config/fish" ]; then
+		mkdir -p "$home_directory/.config/fish/conf.d"
+		cp "$app_directory/env.fish" "$home_directory/.config/fish/conf.d/znpm.fish"
 	fi
 }
 
