@@ -22,6 +22,8 @@ npm:
 npm i -g @zcross/znpm
 ```
 
+The two script lines also put znpm's directories on the PATH of the shell you ran them in, so the check below works in that shell. After `npm i -g` it takes a new shell, and a new session on Windows, because `znpm enable` writes PATH entries that a shell reads when it starts.
+
 Every install leaves znpm off. Turn it on:
 
 ```sh
@@ -53,13 +55,13 @@ ENV PATH="/root/.local/share/znpm/npm-wrapper:/root/.local/share/znpm/bin:$PATH"
 RUN znpm enable
 ```
 
-The install writes that same PATH into the shell startup files, and a `RUN` step loads none of them, so the `ENV` line is what puts the wrapper in front of npm for the rest of the build. An image that switches to `USER node` uses `/home/node/.local/share/znpm` instead.
+The install writes that same PATH into the shell startup files, and a `RUN` step loads none of them, so the `ENV` line is what puts the wrapper in front of npm for the rest of the build. An image that switches to `USER node` runs the install after the `USER` line, so it lands in `/home/node/.local/share/znpm`, which the `ENV` line then names. An install that runs as root before the switch lands in `/root`, out of the `node` user's reach, and the `RUN znpm enable` after it fails with `znpm: not found`.
 
 `install.sh` downloads with curl or wget and stops when it finds neither. `node:24-alpine` carries BusyBox `wget` and `node:24-bookworm` carries both; `node:24-bookworm-slim` carries neither, so install with `RUN npm i -g @zcross/znpm` there and keep the same `ENV` line.
 
 ## Where it lives
 
-Everything znpm installs sits in one directory: `ZNPM_HOME` when it is set, else `%LOCALAPPDATA%\znpm` on Windows, else `$XDG_DATA_HOME/znpm` when it is set, else `~/.local/share/znpm`. It holds the `znpm` binary, the npm wrapper, the `env` file that posix shells source, and `state.json`.
+znpm works out of one directory: `ZNPM_HOME` when it is set, else `%LOCALAPPDATA%\znpm` on Windows, else `$XDG_DATA_HOME/znpm` when it is set, else `~/.local/share/znpm`. An install from a script line puts everything there: the `znpm` binary, the npm wrapper, the `env` file that posix shells source, and `state.json`. An install from npm keeps the binaries in the global npm prefix instead, under `node_modules/@zcross/znpm-<platform>-<arch>`, and uses the directory for the npm wrapper, the `env` file, and `state.json`.
 
 The deduplicated package files live in a content-addressable store outside it, one per volume, which `ZNPM_STORE_DIR` relocates.
 
@@ -69,7 +71,7 @@ The deduplicated package files live in a content-addressable store outside it, o
 znpm gc
 ```
 
-Deletes stored packages that no project uses anymore.
+Deletes stored packages that no project uses anymore, from the store for the working directory's volume. Run it again from a directory on each other volume that has a store.
 
 ## Turning it off
 
@@ -85,9 +87,9 @@ znpm uninstall
 
 Removes znpm from the device entirely, along with the global npm package when you installed it with `npm i -g`. Your projects keep working here too. It fails and names the file it could not remove rather than reporting success over a directory that is still there.
 
-On Windows it cannot delete the binary it is running from, so it moves that binary to `%TEMP%\znpm-uninstalled-<pid>.exe` and leaves it there for you to delete whenever you like, around 86 MB. With `ZNPM_HOME` on a different volume from `%TEMP%` that move fails; point `TEMP` at the same volume and run `znpm uninstall` again.
+On Windows it cannot delete the binary it is running from, so it moves that binary to `%TEMP%\znpm-uninstalled-<pid>.exe` and leaves it there for you to delete whenever you like, around 86 MB. With `%TEMP%` on a different volume from the volume znpm's binary is on, that move fails; point `TEMP` at the same volume and run `znpm uninstall` again.
 
-A version manager installed after znpm appends its own PATH line below znpm's in the shell startup files, so its npm wins in new shells and `npm -v` prints a plain version. Move znpm's `. '<app directory>/env'` line to the end of the file to put the wrapper back in front.
+A version manager installed after znpm appends its own PATH line below znpm's in the shell startup files, so its npm wins in new shells and `npm -v` prints a plain version. Put the wrapper back in front by replacing znpm's `. '<app directory>/env'` line with `export PATH="<app directory>/npm-wrapper:<app directory>/bin:$PATH"` sitting below the version manager's line, in every startup file that carries one. znpm writes its line into as many as five files, and one file is never enough: the `env` file prepends only when the wrapper is absent from PATH, so a second `. '<app directory>/env'` does nothing once an earlier file has run it. That is also why moving the line rather than replacing it leaves the version manager in front on Debian, where `.profile` sources `.bashrc` and then runs the version manager's own second line.
 
 ## Escape hatches
 
