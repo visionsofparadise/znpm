@@ -48,6 +48,7 @@ describe("runningAppDirectoryProcessesOf", { timeout: 60_000 }, () => {
 			encoding: "utf8",
 			env: {
 				...process.env,
+				ZNPM_HOME: appDirectory,
 				LOCALAPPDATA: localAppData,
 				HOME: root,
 			},

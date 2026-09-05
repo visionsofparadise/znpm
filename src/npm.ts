@@ -22,6 +22,7 @@ export function resolveNpm(env: NodeJS.ProcessEnv, appDirectory: string): Npm {
 }
 
 function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | undefined {
+	const executablePath = canonicalPathOf(process.execPath);
 	const npmWrapperDirectory = canonicalPathOf(npmWrapperDirectoryOf(appDirectory));
 	const npmWrapperPath = canonicalPathOf(npmWrapperPathOf(appDirectory));
 	const npmName = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -37,6 +38,10 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | 
 			continue;
 		}
 
+		if (isRunningExecutableNpm(candidateNpmPath, executablePath)) {
+			continue;
+		}
+
 		if (canonicalPathOf(dirname(candidateNpmPath)) === npmWrapperDirectory) {
 			continue;
 		}
@@ -49,6 +54,18 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | 
 	}
 
 	return undefined;
+}
+
+function isRunningExecutableNpm(candidateNpmPath: string, executablePath: string): boolean {
+	if (canonicalPathOf(candidateNpmPath) === executablePath) {
+		return true;
+	}
+
+	if (process.platform !== "win32") {
+		return false;
+	}
+
+	return canonicalPathOf(join(dirname(candidateNpmPath), "npm.exe")) === executablePath;
 }
 
 function npmOf(npmPath: string): Npm {

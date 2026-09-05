@@ -196,6 +196,7 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		const env: NodeJS.ProcessEnv = {
 			...process.env,
 			...options.env,
+			ZNPM_HOME: childAppDirectoryOf(temporaryRoot, localAppData),
 			LOCALAPPDATA: localAppData,
 			HOME: temporaryRoot,
 			PATH: [fakeNpmDirectory, process.env.PATH ?? ""].join(delimiter),
@@ -448,6 +449,7 @@ function runCapturedShadow(
 	const env: NodeJS.ProcessEnv = {
 		...process.env,
 		...envOverrides,
+		ZNPM_HOME: childAppDirectoryOf(workspace.root, workspace.localAppData),
 		LOCALAPPDATA: workspace.localAppData,
 		HOME: workspace.root,
 		ZNPM_STORE_DIR: envOverrides.ZNPM_STORE_DIR ?? workspace.store,
