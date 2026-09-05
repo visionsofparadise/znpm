@@ -5,7 +5,17 @@ import { dirname, join } from "node:path";
 import { platformPackageOf } from "../lib/platformPackageOf.js";
 
 const musl = process.platform === "linux" && process.report.getReport().header.glibcVersionRuntime === undefined;
-const { name, binary } = platformPackageOf(process.platform, process.arch, musl);
+
+let platformPackage;
+
+try {
+	platformPackage = platformPackageOf(process.platform, process.arch, musl);
+} catch (error) {
+	console.error(error.message);
+	process.exit(1);
+}
+
+const { name, binary } = platformPackage;
 
 let packageDirectory;
 

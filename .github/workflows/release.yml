@@ -3,6 +3,7 @@ name: Release
 on:
    push:
       tags: ["v*"]
+   workflow_dispatch:
 
 permissions:
    contents: read
@@ -145,18 +146,20 @@ jobs:
          - run: sha256sum znpm-* npm-wrapper-* > SHA256SUMS
            working-directory: dist
 
-         - run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/* scripts/install.ps1 scripts/install.sh
-           env:
-              GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-         - run: gh release edit "$GITHUB_REF_NAME" --draft=false
+         - run: |
+              if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+                echo "$GITHUB_REF_NAME is already released"
+                exit 0
+              fi
+              gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/* scripts/install.ps1 scripts/install.sh
+              gh release edit "$GITHUB_REF_NAME" --draft=false
            env:
               GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
    publish:
       needs: release
       runs-on: ubuntu-latest
-      timeout-minutes: 20
+      timeout-minutes: 30
       permissions:
          id-token: write
          contents: read
@@ -193,7 +196,14 @@ jobs:
 
          - if: steps.check.outputs.skip == 'false'
            run: |
+              VERSION=$(node -p "require('./package.json').version")
               for directory in dist/npm/znpm-*; do
+                NAME=$(node -p "require('./$directory/package.json').name")
+                PUBLISHED=$(npm view "$NAME@$VERSION" version 2>/dev/null || echo "")
+                if [ "$PUBLISHED" = "$VERSION" ]; then
+                  echo "$NAME@$VERSION is already on the registry"
+                  continue
+                fi
                 npm publish --access public "$directory"
               done
 
