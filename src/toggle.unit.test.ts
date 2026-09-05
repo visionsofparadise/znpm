@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { type PathChange, type State } from "./appData";
-import { insertPathEntry, removeChanges, removePathEntry, removePathEntryIgnoringCase, upsertChange } from "./toggle";
+import {
+	hasPathEntryIgnoringCase,
+	insertPathEntry,
+	removeChanges,
+	removePathEntry,
+	removePathEntryIgnoringCase,
+} from "./toggle";
 
 describe("insertPathEntry", () => {
 	it("prepends the entry", () => {
@@ -39,6 +45,12 @@ describe("removePathEntry", () => {
 	it("leaves a value that does not contain the entry", () => {
 		expect(removePathEntry("a;b", "c", ";")).toBe("a;b");
 	});
+
+	it("leaves an entry spelled in another casing, which is why the machine PATH removal never uses it", () => {
+		const pathValue = "C:\\Windows;C:\\ZNPM\\NPM-WRAPPER";
+
+		expect(removePathEntry(pathValue, "C:\\znpm\\npm-wrapper", ";")).toBe(pathValue);
+	});
 });
 
 describe("removePathEntryIgnoringCase", () => {
@@ -73,15 +85,31 @@ describe("removePathEntryIgnoringCase", () => {
 	});
 });
 
-describe("upsertChange", () => {
-	it("leaves changes duplicate-free on repeat enable", () => {
-		const empty: State = { enabled: false, disabled: false, changes: [], npmPath: undefined };
-		const machine: PathChange = { target: "windowsMachinePath", entry: "C:\\znpm\\shim" };
-		const user: PathChange = { target: "windowsUserPath", entry: "C:\\znpm\\bin" };
-		const once = upsertChange(upsertChange(empty, machine), user);
-		const twice = upsertChange(upsertChange(once, machine), user);
+describe("hasPathEntryIgnoringCase", () => {
+	it("detects an entry spelled in another casing", () => {
+		expect(
+			hasPathEntryIgnoringCase(
+				"C:\\Windows;C:\\USERS\\SOMEONE\\ZNPM\\NPM-WRAPPER",
+				"C:\\Users\\Someone\\znpm\\npm-wrapper",
+				";",
+			),
+		).toBe(true);
+	});
 
-		expect(twice.changes).toEqual([machine, user]);
+	it("removes exactly what it detects, so the machine PATH removal cannot report a no-op success", () => {
+		const entry = "C:\\Users\\Someone\\AppData\\Local\\znpm\\npm-wrapper";
+		const values = [
+			`C:\\Windows;${entry.toUpperCase()};C:\\Program Files\\nodejs`,
+			`C:\\Windows;${entry};C:\\Program Files\\nodejs`,
+			"C:\\Windows;C:\\Program Files\\nodejs",
+			"",
+		];
+
+		for (const pathValue of values) {
+			expect(hasPathEntryIgnoringCase(pathValue, entry, ";")).toBe(
+				removePathEntryIgnoringCase(pathValue, entry, ";") !== pathValue,
+			);
+		}
 	});
 });
 

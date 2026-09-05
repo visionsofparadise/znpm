@@ -106,6 +106,16 @@ describe("withStartupLine", () => {
 
 		expect(withStartupLine(content, line)).toBe(content);
 	});
+
+	it("leaves content carrying the line with CRLF endings", () => {
+		const content = `export EDITOR=vi\r\n${line}\r\nexport PAGER=less\r\n`;
+
+		expect(withStartupLine(content, line)).toBe(content);
+	});
+
+	it("writes the line with the bytes it always writes into CRLF content", () => {
+		expect(withStartupLine("export EDITOR=vi\r\n", line)).toBe(`export EDITOR=vi\r\n${line}\n`);
+	});
 });
 
 describe("withoutStartupLine", () => {
@@ -117,6 +127,18 @@ describe("withoutStartupLine", () => {
 
 	it("leaves content without the line", () => {
 		expect(withoutStartupLine("export EDITOR=vi\n", line)).toBe("export EDITOR=vi\n");
+	});
+
+	it("removes the line from content with CRLF endings", () => {
+		expect(withoutStartupLine(`export EDITOR=vi\r\n${line}\r\nexport PAGER=less\r\n`, line)).toBe(
+			"export EDITOR=vi\r\nexport PAGER=less\r\n",
+		);
+	});
+
+	it("leaves a line that only shares the prefix", () => {
+		const content = `${line} # kept\n`;
+
+		expect(withoutStartupLine(content, line)).toBe(content);
 	});
 });
 

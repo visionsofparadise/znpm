@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { powershellSingleQuote } from "./utils/powershellSingleQuote";
 import { quotedProcessArgumentOf } from "./utils/quotedProcessArgumentOf";
 
 export function applyMachinePathElevated(action: "insert" | "remove", entry: string): void {
@@ -22,12 +23,18 @@ exit $process.ExitCode
 	}
 }
 
-export function powershellSingleQuote(value: string): string {
-	return `'${value.replaceAll("'", "''")}'`;
-}
-
 export function powershellStringArray(values: Array<string>): string {
 	return `@(${values.map((value) => powershellSingleQuote(quotedProcessArgumentOf(value))).join(",")})`;
+}
+
+export function trailingScriptLinesOf(trailing: { command: string; args: Array<string> } | undefined): Array<string> {
+	if (trailing === undefined) {
+		return [];
+	}
+
+	const quoted = [trailing.command, ...trailing.args].map((value) => powershellSingleQuote(value));
+
+	return ["$env:ZNPM_DISABLE = '1'", `& ${quoted.join(" ")}`];
 }
 
 function reinvocationOf(commandArguments: Array<string>): { filePath: string; argumentList: Array<string> } {

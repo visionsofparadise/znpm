@@ -1,4 +1,5 @@
 import { isRecord } from "./utils/isRecord";
+import { powershellSingleQuote } from "./utils/powershellSingleQuote";
 import { runPowerShell } from "./utils/runPowerShell";
 import type { PathChange, State } from "./appData";
 
@@ -19,21 +20,23 @@ export function removePathEntry(pathValue: string, entry: string, separator: str
 }
 
 export function removePathEntryIgnoringCase(pathValue: string, entry: string, separator: string): string {
+	return removeMatchingPathEntries(pathValue, separator, matchesIgnoringCase(entry));
+}
+
+export function hasPathEntryIgnoringCase(pathValue: string, entry: string, separator: string): boolean {
+	return pathValue.split(separator).some(matchesIgnoringCase(entry));
+}
+
+function matchesIgnoringCase(entry: string): (existing: string) => boolean {
 	const lowercased = entry.toLowerCase();
 
-	return removeMatchingPathEntries(pathValue, separator, (existing) => existing.toLowerCase() === lowercased);
+	return (existing) => existing.toLowerCase() === lowercased;
 }
 
 function removeMatchingPathEntries(pathValue: string, separator: string, matches: (entry: string) => boolean): string {
 	const entries = pathValue === "" ? [] : pathValue.split(separator);
 
 	return entries.filter((existing) => !matches(existing)).join(separator);
-}
-
-export function upsertChange(state: State, change: PathChange): State {
-	const key = pathChangeKeyOf(change);
-
-	return { ...state, changes: [...state.changes.filter((existing) => pathChangeKeyOf(existing) !== key), change] };
 }
 
 export function removeChanges(state: State, removed: Array<PathChange>): State {
@@ -51,11 +54,7 @@ export function applyWindowsUserPath(transform: (pathValue: string) => string): 
 }
 
 export function hasWindowsMachinePathEntry(entry: string): boolean {
-	const lowercased = entry.toLowerCase();
-
-	return readWindowsRegistryPath("machine")
-		.value.split(";")
-		.some((existing) => existing.toLowerCase() === lowercased);
+	return hasPathEntryIgnoringCase(readWindowsRegistryPath("machine").value, entry, ";");
 }
 
 function pathChangeKeyOf(change: PathChange): string {
@@ -142,8 +141,4 @@ $subKey = "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"`;
 
 	return `$root = [Microsoft.Win32.Registry]::CurrentUser
 $subKey = "Environment"`;
-}
-
-function powershellSingleQuote(value: string): string {
-	return `'${value.replaceAll("'", "''")}'`;
 }

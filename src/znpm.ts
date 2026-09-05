@@ -28,7 +28,7 @@ import {
 } from "./appData";
 import { runningAppDirectoryProcessesOf, uninstallBusyMessageOf } from "./appDirectoryProcessesOf";
 import { ensureExposure, isNpmPackageExecutable, removeExposure } from "./exposure";
-import { applyMachinePathElevated, powershellSingleQuote } from "./machinePath";
+import { applyMachinePathElevated, trailingScriptLinesOf } from "./machinePath";
 import { npmPathOf, resolveNpm } from "./npm";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { pruneStoreDirectories } from "./prune";
@@ -40,8 +40,10 @@ import {
 	npmCommandForwarder,
 	removeChanges,
 	removePathEntry,
+	removePathEntryIgnoringCase,
 } from "./toggle";
 import { isRecord } from "./utils/isRecord";
+import { powershellSingleQuote } from "./utils/powershellSingleQuote";
 import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
@@ -294,7 +296,7 @@ function applyMachinePath(insert: string | undefined, remove: string | undefined
 	}
 
 	if (remove !== undefined && insert === undefined) {
-		applyWindowsMachinePath((pathValue) => removePathEntry(pathValue, remove, ";"));
+		applyWindowsMachinePath((pathValue) => removePathEntryIgnoringCase(pathValue, remove, ";"));
 
 		return;
 	}
@@ -333,16 +335,6 @@ function scheduleWindowsAppDirectoryRemoval(
 	);
 
 	child.unref();
-}
-
-function trailingScriptLinesOf(trailing: { command: string; args: Array<string> } | undefined): Array<string> {
-	if (trailing === undefined) {
-		return [];
-	}
-
-	const quoted = [trailing.command, ...trailing.args].map((value) => powershellSingleQuote(value));
-
-	return ["$env:ZNPM_DISABLE = '1'", `& ${quoted.join(" ")}`];
 }
 
 function runWithStatus(inProgress: string, complete: string, work: () => void): void {

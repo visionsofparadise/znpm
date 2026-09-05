@@ -55,7 +55,7 @@ export function fishStartupFilePathOf(homeDirectory: string): string {
 }
 
 export function withStartupLine(content: string, line: string): string {
-	if (content.split("\n").includes(line)) {
+	if (content.split("\n").some((existing) => isStartupLine(existing, line))) {
 		return content;
 	}
 
@@ -67,7 +67,7 @@ export function withStartupLine(content: string, line: string): string {
 export function withoutStartupLine(content: string, line: string): string {
 	return content
 		.split("\n")
-		.filter((existing) => existing !== line)
+		.filter((existing) => !isStartupLine(existing, line))
 		.join("\n");
 }
 
@@ -173,6 +173,10 @@ function removeWindowsExposure(appDirectory: string): void {
 	if (hasWindowsMachinePathEntry(npmWrapperDirectory)) {
 		applyMachinePathElevated("remove", npmWrapperDirectory);
 	}
+}
+
+function isStartupLine(existing: string, line: string): boolean {
+	return existing.replace(/\r$/, "") === line;
 }
 
 function fishConfigurationDirectoryOf(homeDirectory: string): string {
