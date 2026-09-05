@@ -328,7 +328,6 @@ function scheduleWindowsAppDirectoryRemoval(
 		"powershell.exe",
 		["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
 		{
-			detached: true,
 			stdio: "ignore",
 			windowsHide: true,
 		},
