@@ -11,7 +11,7 @@ exit $process.ExitCode
 `;
 	const encoded = Buffer.from(script, "utf16le").toString("base64");
 	const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
-		stdio: "inherit",
+		stdio: ["inherit", 2, "inherit"],
 	});
 
 	if (result.error !== undefined) {

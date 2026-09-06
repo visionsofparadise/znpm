@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import { binDirectoryOf, npmWrapperDirectoryOf } from "./appData";
 import { applyMachinePathElevated } from "./machinePath";
 import {
@@ -9,6 +9,31 @@ import {
 	insertPathEntry,
 	removePathEntryIgnoringCase,
 } from "./toggle";
+import { msysPathOf } from "./utils/msysPathOf";
+import { powershellSingleQuote } from "./utils/powershellSingleQuote";
+
+export type ShellName = "sh" | "powershell";
+
+export function shellLineOf(shell: ShellName, appDirectory: string, platform: NodeJS.Platform): string {
+	const windows = platform === "win32";
+	const joinPath = windows ? win32.join : posix.join;
+	const npmWrapperDirectory = joinPath(appDirectory, "npm-wrapper");
+	const binDirectory = joinPath(appDirectory, "bin");
+
+	if (shell === "sh") {
+		const npmWrapperEntry = windows ? msysPathOf(npmWrapperDirectory) : npmWrapperDirectory;
+		const binEntry = windows ? msysPathOf(binDirectory) : binDirectory;
+
+		return `export PATH=${posixSingleQuote(npmWrapperEntry)}:${posixSingleQuote(binEntry)}:"$PATH"
+hash -r 2>/dev/null || true
+`;
+	}
+
+	const delimiter = windows ? ";" : ":";
+
+	return `$env:PATH = ${powershellSingleQuote(`${npmWrapperDirectory}${delimiter}${binDirectory}${delimiter}`)} + $env:PATH
+`;
+}
 
 export function posixEnvScriptOf(appDirectory: string): string {
 	return `znpm_home=${posixSingleQuote(appDirectory)}

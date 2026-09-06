@@ -27,7 +27,7 @@ import {
 } from "./appData";
 import { runningAppDirectoryProcessesOf, uninstallBusyMessageOf } from "./appDirectoryProcessesOf";
 import { displaceRunningExecutable, isDisplacementRequired, removeAppDirectory } from "./appDirectoryRemoval";
-import { ensureExposure, isNpmPackageExecutable, removeExposure } from "./exposure";
+import { ensureExposure, isNpmPackageExecutable, removeExposure, shellLineOf, type ShellName } from "./exposure";
 import { applyMachinePathElevated } from "./machinePath";
 import { npmPathOf, resolveNpm } from "./npm";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
@@ -47,6 +47,8 @@ import { runCli } from "./utils/runCli";
 import { setPnpmWorkerScriptPath } from "./utils/setPnpmWorkerScriptPath";
 import { userArgumentsOf } from "./utils/userArgumentsOf";
 
+let statusStream: NodeJS.WritableStream = process.stdout;
+
 setPnpmWorkerScriptPath();
 await runCli(main);
 
@@ -58,13 +60,24 @@ function main(): void | Promise<void> {
 		options: {
 			insert: { type: "string" },
 			remove: { type: "string" },
+			shell: { type: "string" },
 		},
 	});
 	const [command] = positionals;
 
 	switch (command) {
 		case "enable": {
+			const shell = shellNameOf(values.shell);
+
+			if (shell !== undefined) {
+				statusStream = process.stderr;
+			}
+
 			runWithStatus("enabling...", "enabled", enable);
+
+			if (shell !== undefined) {
+				process.stdout.write(shellLineOf(shell, appDirectoryOf(process.env, process.platform), process.platform));
+			}
 
 			return;
 		}
@@ -319,6 +332,18 @@ function runWithStatus(inProgress: string, complete: string, work: () => void): 
 	log(complete);
 }
 
+function shellNameOf(value: string | undefined): ShellName | undefined {
+	if (value === undefined) {
+		return undefined;
+	}
+
+	if (value === "sh" || value === "powershell") {
+		return value;
+	}
+
+	throw new Error("znpm enable --shell takes sh or powershell");
+}
+
 function log(message: string): void {
-	console.log(message);
+	statusStream.write(`${message}\n`);
 }

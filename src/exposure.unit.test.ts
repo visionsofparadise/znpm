@@ -11,6 +11,7 @@ import {
 	posixEnvScriptOf,
 	posixFishEnvScriptOf,
 	removeExposure,
+	shellLineOf,
 	startupFilesOf,
 	startupSourceLineOf,
 	withoutStartupLine,
@@ -224,5 +225,53 @@ describe.skipIf(process.platform === "win32")("the posix exposure", () => {
 		expect(readFileSync(join(homeDirectory, ".zshrc"), "utf8")).toBe("");
 		expect(readFileSync(join(homeDirectory, ".bash_profile"), "utf8")).toBe("export EDITOR=vi\n");
 		expect(existsSync(fishStartupFilePathOf(homeDirectory))).toBe(false);
+	});
+});
+
+describe("shellLineOf", () => {
+	const windowsAppDirectory = "C:\\Users\\someone\\AppData\\Local\\znpm";
+
+	it("writes the sh line byte for byte", () => {
+		expect(shellLineOf("sh", appDirectory, "linux")).toBe(
+			[
+				`export PATH='${appDirectory}/npm-wrapper':'${appDirectory}/bin':"$PATH"`,
+				"hash -r 2>/dev/null || true",
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("takes the sh directories to their msys form on win32", () => {
+		expect(shellLineOf("sh", windowsAppDirectory, "win32")).toBe(
+			[
+				"export PATH='/c/Users/someone/AppData/Local/znpm/npm-wrapper':'/c/Users/someone/AppData/Local/znpm/bin':\"$PATH\"",
+				"hash -r 2>/dev/null || true",
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("closes and reopens the sh quoting around a single quote", () => {
+		expect(shellLineOf("sh", quotedAppDirectory, "linux").split("\n")[0]).toBe(
+			"export PATH='/home/some'\\''one/znpm/npm-wrapper':'/home/some'\\''one/znpm/bin':\"$PATH\"",
+		);
+	});
+
+	it("writes the powershell line with the win32 delimiter", () => {
+		expect(shellLineOf("powershell", windowsAppDirectory, "win32")).toBe(
+			`$env:PATH = '${windowsAppDirectory}\\npm-wrapper;${windowsAppDirectory}\\bin;' + $env:PATH\n`,
+		);
+	});
+
+	it("writes the powershell line with the posix delimiter", () => {
+		expect(shellLineOf("powershell", appDirectory, "linux")).toBe(
+			`$env:PATH = '${appDirectory}/npm-wrapper:${appDirectory}/bin:' + $env:PATH\n`,
+		);
+	});
+
+	it("doubles a single quote in the powershell line", () => {
+		expect(shellLineOf("powershell", quotedAppDirectory, "linux")).toBe(
+			"$env:PATH = '/home/some''one/znpm/npm-wrapper:/home/some''one/znpm/bin:' + $env:PATH\n",
+		);
 	});
 });
