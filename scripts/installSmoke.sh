@@ -116,6 +116,16 @@ case "$npm_version" in
 	*) ;;
 esac
 
+step "enable"
+znpm enable >&2 || fail "znpm enable exited nonzero"
+
+npm_version="$(npm -v)" || fail "npm -v exited nonzero while enabled"
+
+case "$npm_version" in
+	*"(znpm "*) ;;
+	*) fail "npm -v printed $npm_version while enabled" ;;
+esac
+
 step "uninstall"
 znpm uninstall >&2 || fail "znpm uninstall exited nonzero"
 

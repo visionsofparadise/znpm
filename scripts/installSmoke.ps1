@@ -202,6 +202,23 @@ try {
 		Stop-Smoke "npm -v printed $npmVersion while disabled"
 	}
 
+	Write-Step "enable"
+	& znpm enable
+
+	if ($LASTEXITCODE -ne 0) {
+		Stop-Smoke "znpm enable exited with $LASTEXITCODE"
+	}
+
+	$npmVersion = (& npm -v) -join ""
+
+	if ($LASTEXITCODE -ne 0) {
+		Stop-Smoke "npm -v exited with $LASTEXITCODE while enabled"
+	}
+
+	if ($npmVersion -notlike "*(znpm *") {
+		Stop-Smoke "npm -v printed $npmVersion while enabled"
+	}
+
 	Write-Step "uninstall"
 	& znpm uninstall
 
