@@ -63,18 +63,6 @@ posix_path() {
 	fi
 }
 
-windows_path() {
-	if command -v cygpath >/dev/null 2>&1; then
-		cygpath -w "$1"
-	else
-		printf '%s\n' "$1" | sed -e 's|^/c/|C:/|' -e 's|^/d/|D:/|' -e 's|/|\\|g'
-	fi
-}
-
-single_quote() {
-	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
-}
-
 normalize_posix_path() {
 	normalize_rest="$1"
 	normalize_result=""
@@ -125,16 +113,7 @@ resolve_posix_path() {
 	esac
 }
 
-home_directory=""
-
-if [ "$os" != "windows" ]; then
-	if [ -z "${HOME:-}" ]; then
-		step "znpm requires HOME to write the shell startup lines."
-		exit 1
-	fi
-
-	home_directory="$HOME"
-fi
+home_directory="${HOME:-}"
 
 if [ -n "${ZNPM_HOME:-}" ]; then
 	if [ "$os" = "windows" ]; then
@@ -155,6 +134,11 @@ elif [ "$os" = "windows" ]; then
 elif [ -n "${XDG_DATA_HOME:-}" ]; then
 	app_directory="$(normalize_posix_path "$XDG_DATA_HOME/znpm")"
 else
+	if [ -z "$home_directory" ]; then
+		step "znpm requires ZNPM_HOME, XDG_DATA_HOME, or HOME."
+		exit 1
+	fi
+
 	app_directory="$(normalize_posix_path "$home_directory/.local/share/znpm")"
 fi
 
@@ -194,107 +178,6 @@ verify() {
 		step "znpm requires sha256sum or shasum."
 		exit 1
 	fi
-}
-
-write_env_files() {
-	{
-		printf 'znpm_home=%s\n' "$(single_quote "$app_directory")"
-		cat <<'ENV_BODY'
-case ":$PATH:" in
-	*":$znpm_home/npm-wrapper:"*) ;;
-	*) export PATH="$znpm_home/npm-wrapper:$znpm_home/bin:$PATH" ;;
-esac
-unset znpm_home
-ENV_BODY
-	} >"$app_directory/env"
-
-	{
-		printf 'set -l znpm_home %s\n' "$(single_quote "$app_directory")"
-		cat <<'FISH_BODY'
-if not contains "$znpm_home/npm-wrapper" $PATH
-	set -gx PATH "$znpm_home/npm-wrapper" "$znpm_home/bin" $PATH
-end
-FISH_BODY
-	} >"$app_directory/env.fish"
-}
-
-add_startup_line() {
-	startup_file="$1"
-
-	if [ ! -f "$startup_file" ]; then
-		if [ "$2" != "create" ]; then
-			return 0
-		fi
-
-		: >"$startup_file"
-	fi
-
-	if grep -qxF "$startup_line" "$startup_file"; then
-		return 0
-	fi
-
-	if [ -n "$(tail -c 1 "$startup_file")" ]; then
-		printf '\n' >>"$startup_file"
-	fi
-
-	printf '%s\n' "$startup_line" >>"$startup_file"
-}
-
-expose_posix() {
-	write_env_files
-
-	startup_line=". $(single_quote "$app_directory/env")"
-
-	add_startup_line "$home_directory/.profile" create
-	add_startup_line "$home_directory/.bashrc" create
-	add_startup_line "$home_directory/.zshrc" create
-	add_startup_line "$home_directory/.bash_profile" skip
-	add_startup_line "$home_directory/.zprofile" skip
-
-	if [ -d "$home_directory/.config/fish" ]; then
-		mkdir -p "$home_directory/.config/fish/conf.d"
-		cp "$app_directory/env.fish" "$home_directory/.config/fish/conf.d/znpm.fish"
-	fi
-}
-
-add_windows_user_path() {
-	entry="$(windows_path "$1")"
-	ps1="$temporary_directory/add-user-path.ps1"
-	cat >"$ps1" <<'EOF'
-$ErrorActionPreference = "Stop"
-$entry = $env:ZNPM_PATH_ENTRY
-$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
-if ($null -eq $key) { throw "znpm could not open the user PATH key" }
-try {
-	$kind = 2
-	$value = ""
-	if ($key.GetValueNames() | Where-Object { $_ -ieq "Path" }) {
-		$kind = [int]$key.GetValueKind("Path")
-		$raw = $key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-		if ($raw -is [string[]]) { $value = ($raw -join ";") }
-		elseif ($null -ne $raw) { $value = [string]$raw }
-	}
-	$entries = @()
-	if ($value -ne "") { $entries = $value -split ";" }
-	if ($entries | Where-Object { $_ -ieq $entry }) { return }
-	$key.SetValue("Path", ((@($entry) + $entries) -join ";"), [Microsoft.Win32.RegistryValueKind]$kind)
-} finally {
-	$key.Close()
-}
-if (-not ("EnvironmentNative" -as [type])) {
-	Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class EnvironmentNative {
-  [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-}
-"@
-}
-$result = [UIntPtr]::Zero
-[EnvironmentNative]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result) | Out-Null
-EOF
-	ZNPM_PATH_ENTRY="$entry" powershell.exe -NoProfile -NonInteractive -File "$(windows_path "$ps1")"
 }
 
 if [ -n "$dist_directory" ]; then
@@ -343,22 +226,6 @@ else
 	chmod +x "$znpm_path"
 fi
 
-if [ "$os" = "windows" ]; then
-	step "prepending $bin_directory to the user PATH"
-	add_windows_user_path "$bin_directory"
-else
-	step "writing $app_directory/env and the shell startup lines"
-	expose_posix
-fi
-
 step "installed"
 
-path_prefix="$npm_wrapper_directory:$bin_directory"
-
-export PATH="$path_prefix:$PATH"
-hash -r 2>/dev/null || true
-
-printf 'export PATH="%s:$PATH"\n' "$path_prefix"
-printf '%s\n' 'hash -r 2>/dev/null || true'
-
-step "run: znpm enable"
+"$znpm_path" enable --shell sh

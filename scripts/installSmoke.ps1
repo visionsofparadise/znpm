@@ -119,14 +119,14 @@ try {
 	Write-Step "install"
 	& (Join-Path $scriptDirectory "install.ps1")
 
-	Write-Step "assert the installer wrote the exposure and left znpm disabled"
+	Write-Step "assert the installer wrote the exposure and enabled znpm"
 
 	if (-not (Test-PathValueUnder -PathValue (Get-RegistryPathValue -Scope "user") -Directory $appDirectory)) {
 		Stop-Smoke "install.ps1 left no user PATH entry under $appDirectory"
 	}
 
-	if (Test-PathValueUnder -PathValue (Get-RegistryPathValue -Scope "machine") -Directory $appDirectory) {
-		Stop-Smoke "install.ps1 left a machine PATH entry under $appDirectory, which only enable writes"
+	if (-not (Test-PathValueUnder -PathValue (Get-RegistryPathValue -Scope "machine") -Directory $appDirectory)) {
+		Stop-Smoke "install.ps1 left no machine PATH entry under $appDirectory"
 	}
 
 	$npmVersion = (& npm -v) -join ""
@@ -135,8 +135,8 @@ try {
 		Stop-Smoke "npm -v exited with $LASTEXITCODE after install"
 	}
 
-	if ($npmVersion -like "*(znpm *") {
-		Stop-Smoke "npm -v printed $npmVersion after install, so install left znpm enabled"
+	if ($npmVersion -notlike "*(znpm *") {
+		Stop-Smoke "npm -v printed $npmVersion after install, so install left znpm disabled"
 	}
 
 	$znpmCommand = Get-Command znpm -ErrorAction SilentlyContinue
@@ -149,23 +149,6 @@ try {
 
 	if ((Split-Path -Parent $znpmCommand.Source) -ine $expectedBinDirectory) {
 		Stop-Smoke "znpm resolved to $($znpmCommand.Source) outside $expectedBinDirectory"
-	}
-
-	Write-Step "enable"
-	& znpm enable
-
-	if ($LASTEXITCODE -ne 0) {
-		Stop-Smoke "znpm enable exited with $LASTEXITCODE"
-	}
-
-	$npmVersion = (& npm -v) -join ""
-
-	if ($LASTEXITCODE -ne 0) {
-		Stop-Smoke "npm -v exited with $LASTEXITCODE while enabled"
-	}
-
-	if ($npmVersion -notlike "*(znpm *") {
-		Stop-Smoke "npm -v printed $npmVersion while enabled"
 	}
 
 	Write-Step "install a fixture"

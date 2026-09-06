@@ -48,7 +48,7 @@ ZNPM_DIST="$dist_directory" sh "$script_directory/install.sh" >"$smoke_root/env.
 
 . "$smoke_root/env.sh"
 
-step "assert the installer wrote the exposure and left znpm disabled"
+step "assert the installer wrote the exposure and enabled znpm"
 
 env_file="$app_directory/env"
 startup_line=". '$app_directory/env'"
@@ -72,8 +72,8 @@ done
 npm_version="$(npm -v)" || fail "npm -v exited nonzero after install"
 
 case "$npm_version" in
-	*"(znpm "*) fail "npm -v printed $npm_version after install, so install left znpm enabled" ;;
-	*) ;;
+	*"(znpm "*) ;;
+	*) fail "npm -v printed $npm_version after install, so install left znpm disabled" ;;
 esac
 
 znpm_resolved="$(command -v znpm)" || fail "znpm is not on PATH after install"
@@ -81,16 +81,6 @@ znpm_resolved="$(command -v znpm)" || fail "znpm is not on PATH after install"
 case "$znpm_resolved" in
 	"$app_directory"/*) ;;
 	*) fail "znpm resolved to $znpm_resolved outside $app_directory" ;;
-esac
-
-step "enable"
-znpm enable >&2 || fail "znpm enable exited nonzero"
-
-npm_version="$(npm -v)" || fail "npm -v exited nonzero while enabled"
-
-case "$npm_version" in
-	*"(znpm "*) ;;
-	*) fail "npm -v printed $npm_version while enabled" ;;
 esac
 
 step "install a fixture"

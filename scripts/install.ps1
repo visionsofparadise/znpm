@@ -56,12 +56,6 @@ function Get-ExpectedChecksum {
 	throw "znpm found no SHA256SUMS entry for $Asset"
 }
 
-function Get-PosixSingleQuote {
-	param([string]$Value)
-
-	return "'" + $Value.Replace("'", "'\''") + "'"
-}
-
 function Get-NormalizedPosixPath {
 	param([string]$Value)
 
@@ -98,143 +92,6 @@ function Get-NormalizedPosixPath {
 	}
 
 	return $joined
-}
-
-function Get-PosixEnvScript {
-	param([string]$AppDirectory)
-
-	$body = @'
-case ":$PATH:" in
-	*":$znpm_home/npm-wrapper:"*) ;;
-	*) export PATH="$znpm_home/npm-wrapper:$znpm_home/bin:$PATH" ;;
-esac
-unset znpm_home
-'@
-
-	return "znpm_home=" + (Get-PosixSingleQuote -Value $AppDirectory) + "`n" + ($body -replace "`r`n", "`n") + "`n"
-}
-
-function Get-PosixFishEnvScript {
-	param([string]$AppDirectory)
-
-	$body = @'
-if not contains "$znpm_home/npm-wrapper" $PATH
-	set -gx PATH "$znpm_home/npm-wrapper" "$znpm_home/bin" $PATH
-end
-'@
-
-	return "set -l znpm_home " + (Get-PosixSingleQuote -Value $AppDirectory) + "`n" + ($body -replace "`r`n", "`n") + "`n"
-}
-
-function Get-StartupSourceLine {
-	param([string]$AppDirectory)
-
-	return ". " + (Get-PosixSingleQuote -Value (Join-Path $AppDirectory "env"))
-}
-
-function Add-StartupLine {
-	param([string]$Path, [string]$Line, [bool]$CreateIfAbsent)
-
-	$present = Test-Path -LiteralPath $Path
-
-	if (-not $present -and -not $CreateIfAbsent) {
-		return
-	}
-
-	$content = if ($present) { [IO.File]::ReadAllText($Path) } else { "" }
-
-	foreach ($existing in ($content -split "`n")) {
-		if (($existing -replace "`r$", "") -eq $Line) {
-			return
-		}
-	}
-
-	$separator = if ($content -ne "" -and -not $content.EndsWith("`n")) { "`n" } else { "" }
-
-	[IO.File]::WriteAllText($Path, $content + $separator + $Line + "`n")
-}
-
-function Install-PosixExposure {
-	param([string]$AppDirectory, [string]$HomeDirectory)
-
-	[IO.File]::WriteAllText((Join-Path $AppDirectory "env"), (Get-PosixEnvScript -AppDirectory $AppDirectory))
-	[IO.File]::WriteAllText((Join-Path $AppDirectory "env.fish"), (Get-PosixFishEnvScript -AppDirectory $AppDirectory))
-
-	$line = Get-StartupSourceLine -AppDirectory $AppDirectory
-
-	Add-StartupLine -Path (Join-Path $HomeDirectory ".profile") -Line $line -CreateIfAbsent $true
-	Add-StartupLine -Path (Join-Path $HomeDirectory ".bashrc") -Line $line -CreateIfAbsent $true
-	Add-StartupLine -Path (Join-Path $HomeDirectory ".zshrc") -Line $line -CreateIfAbsent $true
-	Add-StartupLine -Path (Join-Path $HomeDirectory ".bash_profile") -Line $line -CreateIfAbsent $false
-	Add-StartupLine -Path (Join-Path $HomeDirectory ".zprofile") -Line $line -CreateIfAbsent $false
-
-	$fishDirectory = Join-Path (Join-Path $HomeDirectory ".config") "fish"
-
-	if (-not (Test-Path -LiteralPath $fishDirectory)) {
-		return
-	}
-
-	$fishConfigurationDirectory = Join-Path $fishDirectory "conf.d"
-
-	New-Item -ItemType Directory -Path $fishConfigurationDirectory -Force | Out-Null
-	[IO.File]::WriteAllText(
-		(Join-Path $fishConfigurationDirectory "znpm.fish"),
-		(Get-PosixFishEnvScript -AppDirectory $AppDirectory)
-	)
-}
-
-function Add-UserPathEntry {
-	param([string]$Entry)
-
-	$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
-
-	if ($null -eq $key) {
-		throw "znpm could not open the user PATH key"
-	}
-
-	try {
-		$kind = 2
-		$value = ""
-
-		if ($key.GetValueNames() | Where-Object { $_ -ieq "Path" }) {
-			$kind = [int]$key.GetValueKind("Path")
-			$raw = $key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-
-			if ($raw -is [string[]]) {
-				$value = ($raw -join ";")
-			} elseif ($null -ne $raw) {
-				$value = [string]$raw
-			}
-		}
-
-		$entries = @()
-
-		if ($value -ne "") {
-			$entries = $value -split ";"
-		}
-
-		if ($entries | Where-Object { $_ -ieq $Entry }) {
-			return
-		}
-
-		$key.SetValue("Path", ((@($Entry) + $entries) -join ";"), [Microsoft.Win32.RegistryValueKind]$kind)
-	} finally {
-		$key.Close()
-	}
-
-	if (-not ("EnvironmentNative" -as [type])) {
-		Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class EnvironmentNative {
-  [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-}
-"@
-	}
-
-	$result = [UIntPtr]::Zero
-	[EnvironmentNative]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result) | Out-Null
 }
 
 Write-Step "installing..."
@@ -339,21 +196,14 @@ try {
 	Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if ($windows) {
-	Write-Step "prepending $binDirectory to the user PATH"
-	Add-UserPathEntry -Entry $binDirectory
-} else {
-	Write-Step "writing $appDirectory/env and the shell startup lines"
-	Install-PosixExposure -AppDirectory $appDirectory -HomeDirectory $homeDirectory
-}
-
 Write-Step "installed"
-
-Write-Step "prepending $npmWrapperDirectory and $binDirectory to this process PATH"
-$env:PATH = $npmWrapperDirectory + [IO.Path]::PathSeparator + $binDirectory + [IO.Path]::PathSeparator + $env:PATH
 
 if ($windows -and (Test-Path Alias:npm)) {
 	Remove-Item Alias:npm -Force
 }
 
-Write-Step "run: znpm enable"
+& $znpmPath enable --shell powershell | Invoke-Expression
+
+if ($LASTEXITCODE -ne 0) {
+	throw "znpm enable exited with $LASTEXITCODE"
+}
