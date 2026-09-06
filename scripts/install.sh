@@ -7,6 +7,11 @@ step() {
 
 step "installing..."
 
+if ! command -v npm >/dev/null 2>&1; then
+	step "znpm wraps npm and depends on it. Install Node.js and npm, then run this line again."
+	exit 1
+fi
+
 base_url="${ZNPM_BASE_URL:-https://github.com/visionsofparadise/znpm/releases/latest/download}"
 dist_directory="${ZNPM_DIST:-}"
 

@@ -96,6 +96,10 @@ function Get-NormalizedPosixPath {
 
 Write-Step "installing..."
 
+if ($null -eq (Get-Command npm -ErrorAction SilentlyContinue)) {
+	throw "znpm wraps npm and depends on it. Install Node.js and npm, then run this line again."
+}
+
 $target = Get-InstallTarget
 $windows = $target.StartsWith("windows-")
 $exe = if ($windows) { ".exe" } else { "" }

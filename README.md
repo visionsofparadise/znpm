@@ -30,7 +30,7 @@ npm i -g @zcross/znpm; znpm enable --shell powershell | iex
 
 Supports: Windows x64/arm64, Linux x64/arm64 with glibc or musl, macOS arm64/x64
 
-Each line installs znpm and turns it on in the shell you ran it in. On Windows, turning it on asks for elevation once.
+Each line installs znpm and turns it on in the shell you ran it in. znpm wraps npm, so npm has to be on PATH first. On Windows, turning it on asks for elevation once.
 
 Check that npm is going through znpm:
 
@@ -52,7 +52,7 @@ npm run ... # commands unrelated to packages are unaffected
 znpm gc
 ```
 
-Deletes stored packages that no project uses anymore.
+Deletes stored packages on the current drive that no project uses anymore.
 
 ## Turning it off
 
@@ -70,7 +70,9 @@ Removes znpm from the device entirely.
 
 ## Escape hatches
 
-To run a single command on plain npm, set `ZNPM_DISABLE=1` in the environment, or pass `--znpm-disable` on the command, or `"disabled": true` in znpm's `state.json`.
+To run a single command on plain npm, set `ZNPM_DISABLE=1` in the environment, or pass `--znpm-disable` on the command.
+
+To persistently disable set `"disabled": true` in znpm's `state.json`.
 
 You can ignore packages by listing them in your `package.json`:
 

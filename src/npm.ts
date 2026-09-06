@@ -11,7 +11,9 @@ export function npmPathOf(env: NodeJS.ProcessEnv, appDirectory: string): string 
 	const npmPath = pathEntryNpmOf(env, appDirectory) ?? readState(appDirectory).npmPath;
 
 	if (npmPath === undefined) {
-		throw new Error("znpm found no real npm on PATH and none recorded in its state");
+		throw new Error(
+			"znpm wraps npm and depends on it: no npm was found on PATH, and none is recorded in znpm's state. Install Node.js and npm, then run znpm enable.",
+		);
 	}
 
 	return npmPath;
