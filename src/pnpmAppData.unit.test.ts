@@ -9,6 +9,10 @@ describe("pnpmAppDirectoryOf", () => {
 		expect(pnpmAppDirectoryOf({ PNPM_HOME: "/opt/pnpm" }, "linux")).toBe("/opt/pnpm");
 	});
 
+	it("takes an msys PNPM_HOME to its windows form on win32", () => {
+		expect(pnpmAppDirectoryOf({ PNPM_HOME: "/d/pnpm" }, "win32")).toBe("D:\\pnpm");
+	});
+
 	it("uses LOCALAPPDATA\\pnpm on Windows", () => {
 		expect(pnpmAppDirectoryOf({ LOCALAPPDATA: join("D:", "Users", "someone", "AppData", "Local") }, "win32")).toBe(
 			join("D:", "Users", "someone", "AppData", "Local", "pnpm"),

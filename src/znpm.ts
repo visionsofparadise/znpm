@@ -117,7 +117,7 @@ function main(): void | Promise<void> {
 async function gc(): Promise<void> {
 	const storeDirectory = await getStorePath({
 		pkgRoot: process.cwd(),
-		storePath: storeDirectoryOverrideOf(process.env),
+		storePath: storeDirectoryOverrideOf(process.env, process.platform),
 		pnpmHomeDir: pnpmAppDirectoryOf(process.env, process.platform),
 	});
 

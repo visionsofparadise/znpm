@@ -47,6 +47,11 @@ jobs:
            timeout-minutes: 10
            run: powershell -File scripts/installSmoke.ps1 -Dist dist
 
+         - if: matrix.os == 'windows-latest'
+           timeout-minutes: 10
+           shell: bash
+           run: sh scripts/installSmoke.sh dist
+
          - uses: actions/upload-artifact@v4
            with:
               name: dist-${{ matrix.os }}

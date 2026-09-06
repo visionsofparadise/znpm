@@ -77,7 +77,7 @@ async function convertAfterNpm(npm: Npm, npmArguments: Array<string>): Promise<v
 }
 
 async function convertCandidateTreeDirectory(projectDirectory: string, reportLevel: NpmReportLevel): Promise<void> {
-	const storeDirectory = storeDirectoryOverrideOf(process.env);
+	const storeDirectory = storeDirectoryOverrideOf(process.env, process.platform);
 
 	try {
 		const summary = await convert(projectDirectory, {

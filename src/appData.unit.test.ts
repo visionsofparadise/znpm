@@ -34,6 +34,14 @@ describe("appDirectoryOf", () => {
 		expect(appDirectoryOf(env, "linux")).toBe(join(homedir(), "znpm-home"));
 	});
 
+	it("takes an msys ZNPM_HOME to its windows form on win32", () => {
+		expect(appDirectoryOf({ ZNPM_HOME: "/c/tmp/znpm-home" }, "win32")).toBe(resolve("C:\\tmp\\znpm-home"));
+	});
+
+	it("leaves an msys-looking ZNPM_HOME alone off win32", () => {
+		expect(appDirectoryOf({ ZNPM_HOME: "/c/tmp/znpm-home" }, "linux")).toBe(resolve("/c/tmp/znpm-home"));
+	});
+
 	it("resolves a relative ZNPM_HOME against the working directory", () => {
 		expect(appDirectoryOf({ ZNPM_HOME: join("relative", "znpm-home") }, "linux")).toBe(
 			resolve(process.cwd(), "relative", "znpm-home"),

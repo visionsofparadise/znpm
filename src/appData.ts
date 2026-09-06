@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { isRecord } from "./utils/isRecord";
+import { environmentPathOf } from "./utils/windowsPathOf";
 
 export type PathChange =
 	| { target: "windowsMachinePath"; entry: string }
@@ -17,7 +18,7 @@ export interface State {
 
 export function appDirectoryOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
 	if (env.ZNPM_HOME !== undefined && env.ZNPM_HOME !== "") {
-		return resolve(env.ZNPM_HOME);
+		return resolve(environmentPathOf(env.ZNPM_HOME, platform));
 	}
 
 	if (platform === "win32") {

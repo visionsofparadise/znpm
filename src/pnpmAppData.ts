@@ -1,9 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { environmentPathOf } from "./utils/windowsPathOf";
 
 export function pnpmAppDirectoryOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
 	if (env.PNPM_HOME !== undefined && env.PNPM_HOME !== "") {
-		return env.PNPM_HOME;
+		return environmentPathOf(env.PNPM_HOME, platform);
 	}
 
 	if (platform === "win32") {
