@@ -5,6 +5,7 @@ import { binDirectoryOf, npmWrapperDirectoryOf } from "./appData";
 import { applyMachinePathElevated } from "./machinePath";
 import {
 	applyWindowsUserPath,
+	hasPathEntryIgnoringCase,
 	hasWindowsMachinePathEntry,
 	insertPathEntry,
 	removePathEntryIgnoringCase,
@@ -181,7 +182,11 @@ function ensureWindowsExposure(appDirectory: string): void {
 	const npmWrapperDirectory = npmWrapperDirectoryOf(appDirectory);
 
 	if (existsSync(join(binDirectory, "znpm.exe"))) {
-		applyWindowsUserPath((pathValue) => insertPathEntry(pathValue, binDirectory, ";"));
+		applyWindowsUserPath((pathValue) =>
+			hasPathEntryIgnoringCase(pathValue, binDirectory, ";")
+				? pathValue
+				: insertPathEntry(pathValue, binDirectory, ";"),
+		);
 	}
 
 	if (!hasWindowsMachinePathEntry(npmWrapperDirectory)) {
