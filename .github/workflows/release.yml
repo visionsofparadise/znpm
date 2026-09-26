@@ -52,6 +52,7 @@ jobs:
 
          - uses: actions/upload-artifact@v4
            with:
+              retention-days: 1
               name: dist-${{ matrix.os }}
               path: dist/
 
@@ -146,15 +147,36 @@ jobs:
          - run: sha256sum znpm-* npm-wrapper-* > SHA256SUMS
            working-directory: dist
 
-         - run: |
+         - env:
+              GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           run: |
               if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
                 echo "$GITHUB_REF_NAME is already released"
                 exit 0
               fi
               gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/* scripts/install.ps1 scripts/install.sh
               gh release edit "$GITHUB_REF_NAME" --draft=false
+
+         - name: Delete older stable releases
            env:
-              GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              GH_TOKEN: ${{ github.token }}
+           run: node scripts/releaseRetention.mjs releases "$GITHUB_REF_NAME"
+
+   cleanup-artifacts:
+      needs: [test, containers, release, publish]
+      if: ${{ always() && needs.test.result == 'success' && needs.containers.result == 'success' && needs.release.result == 'success' && needs.publish.result == 'success' }}
+      runs-on: ubuntu-latest
+      permissions:
+         actions: write
+      steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+           with:
+              node-version: "24"
+         - name: Delete temporary workflow artifacts
+           env:
+              GH_TOKEN: ${{ github.token }}
+           run: node scripts/releaseRetention.mjs artifacts
 
    publish:
       needs: release
