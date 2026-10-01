@@ -30,6 +30,7 @@ import { displaceRunningExecutable, isDisplacementRequired, removeAppDirectory }
 import { ensureExposure, isNpmPackageExecutable, removeExposure, shellLineOf, type ShellName } from "./exposure";
 import { applyMachinePathElevated } from "./machinePath";
 import { npmPathOf, resolveNpm } from "./npm";
+import { npmChildEnvOf } from "./npmChildEnvOf";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { pruneStoreDirectories } from "./prune";
 import { storeDirectoryOverrideOf } from "./storeDirectoryOverrideOf";
@@ -227,7 +228,7 @@ function uninstall(): void {
 
 		const result = spawnSync(npmRemoval.command, npmRemoval.args, {
 			stdio: "inherit",
-			env: { ...process.env, ZNPM_DISABLE: "1" },
+			env: npmChildEnvOf({ ...process.env, ZNPM_DISABLE: "1" }),
 		});
 
 		if (result.error !== undefined) {

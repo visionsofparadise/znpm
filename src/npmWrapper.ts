@@ -7,6 +7,7 @@ import { isNpmVersionQuery } from "./isNpmVersionQuery";
 import { isTreeMutatingNpmCommand } from "./isTreeMutatingNpmCommand";
 import { resolveNpm, type Npm } from "./npm";
 import { npmCacheDirectoryOf } from "./npmCache";
+import { npmChildEnvOf } from "./npmChildEnvOf";
 import { npmReportLevelOf, type NpmReportLevel } from "./npmReportLevelOf";
 import { npmVersionLineOf } from "./npmVersionLineOf";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
@@ -108,7 +109,7 @@ function exitWithNpm(npm: Npm, npmArguments: Array<string>, env: NodeJS.ProcessE
 function spawnNpm(npm: Npm, npmArguments: Array<string>, env: NodeJS.ProcessEnv): number {
 	const result = spawnSync(npm.command, [...npm.argsPrefix, ...npmArguments], {
 		stdio: "inherit",
-		env,
+		env: npmChildEnvOf(env),
 	});
 
 	if (result.error !== undefined) {
@@ -123,7 +124,7 @@ function spawnNpmVersion(npm: Npm, npmArguments: Array<string>, env: NodeJS.Proc
 	const result = spawnSync(npm.command, [...npm.argsPrefix, ...npmArguments], {
 		encoding: "utf8",
 		stdio: ["inherit", "pipe", "inherit"],
-		env,
+		env: npmChildEnvOf(env),
 	});
 
 	if (result.error !== undefined) {
