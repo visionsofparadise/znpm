@@ -45,7 +45,11 @@ jobs:
            with:
               node-version: "24"
 
-         - run: npm install -g npm@12
+         - name: Pin npm 12
+           run: npm install -g npm@12
+
+         - name: Enforce install-script allowlist
+           run: npm config set strict-allow-scripts=true --location=project
 
          - run: npm ci
 
@@ -76,7 +80,11 @@ jobs:
            with:
               node-version: "24"
 
-         - run: npm install -g npm@12
+         - name: Pin npm 12
+           run: npm install -g npm@12
+
+         - name: Enforce install-script allowlist
+           run: npm config set strict-allow-scripts=true --location=project
 
          - run: npm ci
 
@@ -239,7 +247,11 @@ jobs:
               node-version: "24"
               registry-url: "https://registry.npmjs.org"
 
-         - run: npm install -g npm@12
+         - name: Pin npm 12
+           run: npm install -g npm@12
+
+         - name: Enforce install-script allowlist
+           run: npm config set strict-allow-scripts=true --location=project
 
          - uses: actions/download-artifact@v4
            with:
