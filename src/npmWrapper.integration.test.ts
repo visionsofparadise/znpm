@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { version as znpmVersion } from "../package.json" with { type: "json" };
@@ -9,6 +9,7 @@ import { writeState } from "./appData";
 import { type ConvertSummary } from "./convert";
 import { candidatePackagesOf, readHiddenLockfile } from "./hiddenLockfile";
 import { cacacheTarballPathOf } from "./npmCache";
+import { nodeFirstEnvOf } from "./utils/nodeFirstEnvOf";
 
 const npmWrapperScript = fileURLToPath(new URL("./npmWrapper.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
@@ -193,14 +194,16 @@ describe("the npm wrapper", { timeout: 60_000 }, () => {
 		stdout: string;
 		stderr: string;
 	} {
-		const env: NodeJS.ProcessEnv = {
-			...process.env,
-			...options.env,
-			ZNPM_HOME: childAppDirectoryOf(temporaryRoot, localAppData),
-			LOCALAPPDATA: localAppData,
-			HOME: temporaryRoot,
-			PATH: [fakeNpmDirectory, process.env.PATH ?? ""].join(delimiter),
-		};
+		const env = nodeFirstEnvOf(
+			{
+				...process.env,
+				...options.env,
+				ZNPM_HOME: childAppDirectoryOf(temporaryRoot, localAppData),
+				LOCALAPPDATA: localAppData,
+				HOME: temporaryRoot,
+			},
+			[fakeNpmDirectory],
+		);
 
 		deleteMatchingEnvKeys(env, ["npm_config_loglevel", "npm_config_json"]);
 
@@ -446,7 +449,7 @@ function runCapturedShadow(
 	workspace: Workspace,
 	envOverrides: NodeJS.ProcessEnv = {},
 ): { status: number | null; stdout: string; stderr: string } {
-	const env: NodeJS.ProcessEnv = {
+	const env = nodeFirstEnvOf({
 		...process.env,
 		...envOverrides,
 		ZNPM_HOME: childAppDirectoryOf(workspace.root, workspace.localAppData),
@@ -457,7 +460,7 @@ function runCapturedShadow(
 		npm_config_audit: "false",
 		npm_config_fund: "false",
 		npm_config_update_notifier: "false",
-	};
+	});
 
 	for (const key of Object.keys(env)) {
 		if (key.toLowerCase() === "npm_config_cache" && key !== "npm_config_cache") {

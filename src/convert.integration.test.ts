@@ -22,6 +22,7 @@ import { readHiddenLockfile, candidatePackagesOf } from "./hiddenLockfile";
 import { resolveNpm } from "./npm";
 import { cacacheTarballPathOf } from "./npmCache";
 import { pruneStoreDirectories } from "./prune";
+import { nodeFirstEnvOf } from "./utils/nodeFirstEnvOf";
 
 interface Workspace {
 	root: string;
@@ -471,8 +472,8 @@ function runNpm(
 	npmArguments: Array<string>,
 	workspace: Workspace,
 ): { stdout: string; stderr: string; status: number | null } {
-	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.env, process.platform));
-	const env: NodeJS.ProcessEnv = { ...process.env, ZNPM_DISABLE: "1" };
+	const env = nodeFirstEnvOf({ ...process.env, ZNPM_DISABLE: "1" });
+	const npm = resolveNpm(env, appDirectoryOf(process.env, process.platform));
 
 	for (const key of Object.keys(env)) {
 		if (key.toLowerCase() === "npm_config_cache") {

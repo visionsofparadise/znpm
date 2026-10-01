@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { appDirectoryOf } from "./appData";
 import { convert } from "./convert";
 import { resolveNpm } from "./npm";
+import { nodeFirstEnvOf } from "./utils/nodeFirstEnvOf";
 
 const znpmScript = fileURLToPath(new URL("./znpm.ts", import.meta.url));
 const tsxLoader = import.meta.resolve("tsx");
@@ -91,8 +92,8 @@ function writeFixture(workspace: Workspace, name: string, dependencies: Record<s
 }
 
 function runNpm(cwd: string, npmArguments: Array<string>, workspace: Workspace): void {
-	const npm = resolveNpm({ ...process.env, ZNPM_DISABLE: "1" }, appDirectoryOf(process.env, process.platform));
-	const env: NodeJS.ProcessEnv = { ...process.env, ZNPM_DISABLE: "1" };
+	const env = nodeFirstEnvOf({ ...process.env, ZNPM_DISABLE: "1" });
+	const npm = resolveNpm(env, appDirectoryOf(process.env, process.platform));
 
 	for (const key of Object.keys(env)) {
 		if (key.toLowerCase() === "npm_config_cache") {
