@@ -1,15 +1,37 @@
 name: Release
 
 on:
-   push:
-      tags: ["v*"]
    workflow_dispatch:
 
 permissions:
    contents: read
 
 jobs:
+   gate:
+      if: github.ref == 'refs/heads/main'
+      runs-on: ubuntu-latest
+      timeout-minutes: 20
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+
+         - uses: actions/setup-node@v4
+           with:
+              node-version: "24"
+
+         - run: npm install -g npm@12
+
+         - run: npm ci
+
+         - run: npm run check
+
+         - run: npm run unit
+
+         - run: npm run integration
+
    test:
+      needs: gate
       runs-on: ${{ matrix.os }}
       timeout-minutes: 20
       strategy:
@@ -33,12 +55,6 @@ jobs:
 
          - run: npm ci
 
-         - run: npm run check
-
-         - run: npm run unit
-
-         - run: npm run integration
-
          - run: node scripts/build.mjs ${{ matrix.targets }}
 
          - run: node scripts/smoke.mjs
@@ -49,6 +65,11 @@ jobs:
          - if: matrix.os == 'windows-latest'
            timeout-minutes: 10
            run: powershell -File scripts/installSmoke.ps1 -Dist dist
+
+         - if: matrix.os == 'windows-latest'
+           timeout-minutes: 10
+           shell: bash
+           run: sh scripts/installSmoke.sh dist
 
          - uses: actions/upload-artifact@v4
            with:
@@ -136,7 +157,7 @@ jobs:
       steps:
          - uses: actions/checkout@v4
 
-         - run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+         - run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
 
          - uses: actions/download-artifact@v4
            with:
@@ -150,17 +171,17 @@ jobs:
          - env:
               GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
            run: |
-              if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-                echo "$GITHUB_REF_NAME is already released"
+              if gh release view "$tag" >/dev/null 2>&1; then
+                echo "$tag is already released"
                 exit 0
               fi
-              gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/* scripts/install.ps1 scripts/install.sh
-              gh release edit "$GITHUB_REF_NAME" --draft=false
+              gh release create "$tag" --target "$GITHUB_SHA" --draft --title "$tag" --generate-notes dist/* scripts/install.ps1 scripts/install.sh
+              gh release edit "$tag" --draft=false
 
          - name: Delete older stable releases
            env:
               GH_TOKEN: ${{ github.token }}
-           run: node scripts/releaseRetention.mjs releases "$GITHUB_REF_NAME"
+           run: node scripts/releaseRetention.mjs releases "$tag"
 
    cleanup-artifacts:
       needs: [test, containers, release, publish]
