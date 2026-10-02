@@ -8,6 +8,7 @@ import {
 	mkdirSync,
 	readFileSync,
 	readlinkSync,
+	rmSync,
 	statSync,
 	unlinkSync,
 	writeFileSync,
@@ -29,7 +30,7 @@ import { runningAppDirectoryProcessesOf, uninstallBusyMessageOf } from "./appDir
 import { displaceRunningExecutable, isDisplacementRequired, removeAppDirectory } from "./appDirectoryRemoval";
 import { ensureExposure, isNpmPackageExecutable, removeExposure, shellLineOf, type ShellName } from "./exposure";
 import { applyMachinePathElevated } from "./machinePath";
-import { npmPathOf, resolveNpm } from "./npm";
+import { isInsideAppDirectory, npmPathOf, resolveNpm } from "./npm";
 import { npmChildEnvOf } from "./npmChildEnvOf";
 import { pnpmAppDirectoryOf } from "./pnpmAppData";
 import { pruneStoreDirectories } from "./prune";
@@ -182,11 +183,42 @@ function enable(): void {
 	placeNpmWrapper(appDirectory);
 	log("placing the PATH exposure");
 	ensureExposure(appDirectory, process.env);
+	retireLegacyLayout(appDirectory);
 
 	const npmPath = npmPathOf(process.env, appDirectory);
 
 	log(`using real npm at ${npmPath}`);
 	writeState(appDirectory, { ...readState(appDirectory), npmPath, enabled: true });
+}
+
+function retireLegacyLayout(appDirectory: string): void {
+	const npmWrapperDirectory = npmWrapperDirectoryOf(appDirectory);
+
+	for (const change of readState(appDirectory).changes) {
+		if (
+			change.target !== "windowsMachinePath" ||
+			!isInsideAppDirectory(change.entry, appDirectory) ||
+			change.entry.toLowerCase() === npmWrapperDirectory.toLowerCase()
+		) {
+			continue;
+		}
+
+		reverseChange(change, appDirectory);
+		writeState(appDirectory, removeChanges(readState(appDirectory), [change]));
+		removeLegacyPath(change.entry);
+	}
+
+	removeLegacyPath(join(appDirectory, "npm-wrapper.exe"));
+}
+
+function removeLegacyPath(path: string): void {
+	try {
+		rmSync(path, { recursive: true, force: true });
+	} catch (error: unknown) {
+		console.error(
+			`znpm left ${path} in place: ${error instanceof Error ? error.message : String(error)}; remove it once no npm is running`,
+		);
+	}
 }
 
 function disable(): void {

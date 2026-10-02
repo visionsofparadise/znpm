@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
-import { delimiter, dirname, join, resolve } from "node:path";
-import { npmWrapperDirectoryOf, npmWrapperPathOf, readState } from "./appData";
+import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { readState } from "./appData";
 
 export interface Npm {
 	command: string;
@@ -8,7 +8,12 @@ export interface Npm {
 }
 
 export function npmPathOf(env: NodeJS.ProcessEnv, appDirectory: string): string {
-	const npmPath = pathEntryNpmOf(env, appDirectory) ?? readState(appDirectory).npmPath;
+	const recordedNpmPath = readState(appDirectory).npmPath;
+	const npmPath =
+		pathEntryNpmOf(env, appDirectory) ??
+		(recordedNpmPath !== undefined && !isInsideAppDirectory(recordedNpmPath, appDirectory)
+			? recordedNpmPath
+			: undefined);
 
 	if (npmPath === undefined) {
 		throw new Error(
@@ -25,8 +30,6 @@ export function resolveNpm(env: NodeJS.ProcessEnv, appDirectory: string): Npm {
 
 function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | undefined {
 	const executablePath = canonicalPathOf(process.execPath);
-	const npmWrapperDirectory = canonicalPathOf(npmWrapperDirectoryOf(appDirectory));
-	const npmWrapperPath = canonicalPathOf(npmWrapperPathOf(appDirectory));
 	const npmName = process.platform === "win32" ? "npm.cmd" : "npm";
 
 	for (const entry of (env.PATH ?? "").split(delimiter)) {
@@ -44,11 +47,7 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | 
 			continue;
 		}
 
-		if (canonicalPathOf(dirname(candidateNpmPath)) === npmWrapperDirectory) {
-			continue;
-		}
-
-		if (canonicalPathOf(candidateNpmPath) === npmWrapperPath) {
+		if (isInsideAppDirectory(candidateNpmPath, appDirectory)) {
 			continue;
 		}
 
@@ -56,6 +55,12 @@ function pathEntryNpmOf(env: NodeJS.ProcessEnv, appDirectory: string): string | 
 	}
 
 	return undefined;
+}
+
+export function isInsideAppDirectory(path: string, appDirectory: string): boolean {
+	const relativePath = relative(canonicalPathOf(appDirectory), canonicalPathOf(path));
+
+	return relativePath !== "" && !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 function isRunningExecutableNpm(candidateNpmPath: string, executablePath: string): boolean {
