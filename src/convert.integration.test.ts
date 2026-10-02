@@ -476,7 +476,7 @@ function runNpm(
 	const npm = resolveNpm(env, appDirectoryOf(process.env, process.platform));
 
 	for (const key of Object.keys(env)) {
-		if (key.toLowerCase() === "npm_config_cache") {
+		if (key.toLowerCase().startsWith("npm_config_")) {
 			delete env[key];
 		}
 	}
