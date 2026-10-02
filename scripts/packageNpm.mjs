@@ -120,7 +120,9 @@ function packReportsOf(directories) {
 	}
 
 	try {
-		return JSON.parse(result.stdout);
+		const reports = JSON.parse(result.stdout);
+
+		return Array.isArray(reports) ? reports : Object.values(reports);
 	} catch {
 		console.error(`npm pack --dry-run --json printed no report:\n${result.stdout}`);
 		process.exit(1);
